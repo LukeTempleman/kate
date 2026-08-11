@@ -21,6 +21,7 @@ import tech.gonxt.kate.memory.MemoryStore
 import tech.gonxt.kate.memory.db.KateDb
 import tech.gonxt.kate.models.ModelStatus
 import tech.gonxt.kate.models.Models
+import tech.gonxt.kate.skills.SkillManager
 import tech.gonxt.kate.core.VoicePipeline
 import tech.gonxt.kate.models.ModelManager
 import tech.gonxt.kate.settings.KateSettings
@@ -81,12 +82,14 @@ class KateApplication : Application() {
 
     val memoryRecall by lazy { MemoryRecall(memoryStore) }
 
-    val engine by lazy {
+    val skillManager by lazy { SkillManager(this, db, brainRouter, appScope) { engine } }
+
+    val engine: ConversationEngine by lazy {
         ConversationEngine(
             brain = brainRouter,
             tts = ttsRouter,
             scope = appScope,
-            intercept = { memoryRecall.intercept(it) },
+            intercept = { text -> skillManager.intercept(text) ?: memoryRecall.intercept(text) },
             onTurn = { role, text, model, latencyMs -> memoryStore.onTurn(role, text, model, latencyMs) },
             modelLabel = { brainRouter.activeLabel.value.lowercase() },
         )

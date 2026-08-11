@@ -78,6 +78,7 @@ dependencies {
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)
     ksp(libs.room.compiler)
+    implementation(libs.work.runtime.ktx)
     implementation(files("libs/sherpa-onnx-1.13.5.aar"))
 
     testImplementation(libs.junit)
