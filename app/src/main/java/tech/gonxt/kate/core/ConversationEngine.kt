@@ -102,6 +102,9 @@ class ConversationEngine(
                 val chunker = SentenceChunker()
                 val sentences = chunker.feed(text) + listOfNotNull(chunker.flush())
                 for (s in sentences) tts.speak(s)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (_: Exception) {
             } finally {
                 tts.stop()
                 _orbState.value = OrbState.IDLE
@@ -185,6 +188,13 @@ class ConversationEngine(
                 latency.complete()
                 val kateText = _messages.value.firstOrNull { it.id == kateId }?.text.orEmpty()
                 onTurn?.invoke("kate", kateText, modelLabel(), latency.lastCompleted.value.total())
+            }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // A dead brain or voice must never crash the app (spec §1.5).
+            updateStreaming(kateId, markDone = true) {
+                it.ifEmpty { "Something went wrong: ${e.message ?: e.javaClass.simpleName}" }
             }
         } finally {
             tts.stop()

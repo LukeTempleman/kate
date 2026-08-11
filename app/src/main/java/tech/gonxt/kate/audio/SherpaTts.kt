@@ -74,6 +74,7 @@ class SherpaTts private constructor(
                         tokens = "$d/tokens.txt",
                         dataDir = "$d/espeak-ng-data",
                         lexicon = "$d/lexicon-gb-en.txt,$d/lexicon-us-en.txt",
+                        lang = "eng",
                     ),
                     numThreads = 4,
                     provider = "cpu",

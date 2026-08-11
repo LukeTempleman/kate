@@ -83,12 +83,19 @@ class VoicePipeline(
 
     private suspend fun runLoop() {
         _status.value = "loading ear models…"
-        val (wake, stt) = withContext(Dispatchers.IO) {
-            SherpaWake(modelManager.path(Models.KWS_ZIPFORMER)) to
-                SherpaStt(
-                    whisperDir = modelManager.path(Models.WHISPER_SMALL_EN),
-                    vadModel = modelManager.path(Models.SILERO_VAD),
-                )
+        val (wake, stt) = try {
+            withContext(Dispatchers.IO) {
+                SherpaWake(modelManager.path(Models.KWS_ZIPFORMER)) to
+                    SherpaStt(
+                        whisperDir = modelManager.path(Models.WHISPER_SMALL_EN),
+                        vadModel = modelManager.path(Models.SILERO_VAD),
+                    )
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("KatePipeline", "ear model load failed", e)
+            _status.value = "ears failed: ${e.message?.take(60)}"
+            _mode.value = Mode.OFF
+            return
         }
         _mode.value = Mode.WAKE
         _status.value = "say “Kate”"

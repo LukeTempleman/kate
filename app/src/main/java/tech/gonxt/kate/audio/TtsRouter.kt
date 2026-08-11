@@ -61,14 +61,32 @@ class TtsRouter(
     private var ampJob: Job? = null
 
     override suspend fun speak(sentence: String) {
-        val engine = resolve()
+        // Spec §1.5: no feature hard-fails. A broken voice model degrades to the
+        // next engine instead of taking the app down.
+        val engine = try {
+            resolve()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            android.util.Log.e("KateTts", "tts load failed", e)
+            activeLabel.value = "ERR:${e.message?.take(40)}"
+            kokoro = null
+            dummy
+        }
         if (engine !== active) {
             active = engine
-            activeLabel.value = engine.id.uppercase()
+            if (!activeLabel.value.startsWith("ERR")) activeLabel.value = engine.id.uppercase()
             ampJob?.cancel()
             ampJob = scope.launch { engine.amplitude.collect { _amplitude.value = it } }
         }
-        engine.speak(sentence)
+        try {
+            engine.speak(sentence)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            android.util.Log.e("KateTts", "speak failed", e)
+            activeLabel.value = "ERR:${e.message?.take(40)}"
+        }
     }
 
     override fun stop() {
