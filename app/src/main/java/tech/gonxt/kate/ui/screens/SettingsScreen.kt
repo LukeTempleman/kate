@@ -131,6 +131,15 @@ fun SettingsScreen(vm: KateViewModel, onBack: () -> Unit, onOpenVoiceLab: () -> 
             }
         }
 
+        SectionLabel("MEMORY")
+        val memCount by vm.memoryCount.collectAsStateWithLifecycle()
+        Text(
+            "$memCount memories captured · say “what did I say about…”, “forget that”, “pin that”",
+            style = MaterialTheme.typography.bodySmall,
+            color = KateColors.TextDim,
+        )
+        ModelRow(vm, Models.EMBEDDER)
+
         SectionLabel("KEYS")
         KeyField("Groq API key (online brain)", s.groqApiKey, vm::setGroqApiKey)
         KeyField("Picovoice access key (wake word)", s.picovoiceAccessKey, vm::setPicovoiceAccessKey)

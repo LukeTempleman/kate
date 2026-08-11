@@ -20,6 +20,11 @@ class ConversationEngine(
     private val tts: TtsEngine,
     private val scope: CoroutineScope,
     private val latency: LatencyTracker = LatencyTracker(),
+    /** Pre-brain hook (memory recall, capabilities). Non-null answer skips the brain. */
+    private val intercept: (suspend (String) -> String?)? = null,
+    /** Iteration 2: every turn captured into memory. */
+    private val onTurn: ((role: String, text: String, modelUsed: String?, latencyMs: Long?) -> Unit)? = null,
+    private val modelLabel: () -> String = { "dummy" },
 ) {
     private val _orbState = MutableStateFlow(OrbState.IDLE)
     val orbState: StateFlow<OrbState> = _orbState
@@ -116,10 +121,29 @@ class ConversationEngine(
     private suspend fun runTurn(userText: String, alreadyMarked: Boolean = false) {
         if (!alreadyMarked) latency.begin("submit")
         _messages.value += ChatMessage(nextId++, Role.USER, userText)
+        onTurn?.invoke("user", userText, null, null)
         _orbState.value = OrbState.THINKING
 
         val kateId = nextId++
         _messages.value += ChatMessage(kateId, Role.KATE, "", streaming = true)
+
+        val direct = intercept?.invoke(userText)
+        if (direct != null) {
+            try {
+                latency.mark("first_speech")
+                _orbState.value = OrbState.SPEAKING
+                updateStreaming(kateId, markDone = true) { direct }
+                val chunker = SentenceChunker()
+                for (s in chunker.feed(direct) + listOfNotNull(chunker.flush())) tts.speak(s)
+                latency.mark("speech_done")
+                latency.complete()
+                onTurn?.invoke("kate", direct, "memory", latency.lastCompleted.value.total())
+            } finally {
+                tts.stop()
+                _orbState.value = OrbState.IDLE
+            }
+            return
+        }
 
         val chunker = SentenceChunker()
         var firstToken = true
@@ -156,6 +180,8 @@ class ConversationEngine(
                 speaker.join()
                 latency.mark("speech_done")
                 latency.complete()
+                val kateText = _messages.value.firstOrNull { it.id == kateId }?.text.orEmpty()
+                onTurn?.invoke("kate", kateText, modelLabel(), latency.lastCompleted.value.total())
             }
         } finally {
             tts.stop()

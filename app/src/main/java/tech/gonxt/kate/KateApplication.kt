@@ -8,11 +8,18 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import android.os.PowerManager
+import kotlinx.coroutines.launch
 import tech.gonxt.kate.audio.TtsRouter
 import tech.gonxt.kate.brain.BrainRouter
 import tech.gonxt.kate.brain.GroqBrain
 import tech.gonxt.kate.brain.OnDeviceBrain
 import tech.gonxt.kate.core.ConversationEngine
+import tech.gonxt.kate.memory.HashingEmbedder
+import tech.gonxt.kate.memory.MediaPipeEmbedder
+import tech.gonxt.kate.memory.MemoryRecall
+import tech.gonxt.kate.memory.MemoryStore
+import tech.gonxt.kate.memory.db.KateDb
+import tech.gonxt.kate.models.ModelStatus
 import tech.gonxt.kate.models.Models
 import tech.gonxt.kate.core.VoicePipeline
 import tech.gonxt.kate.models.ModelManager
@@ -48,7 +55,42 @@ class KateApplication : Application() {
         )
     }
 
-    val engine by lazy { ConversationEngine(brain = brainRouter, tts = ttsRouter, scope = appScope) }
+    val db by lazy { KateDb.build(this) }
+
+    val memoryStore by lazy {
+        MemoryStore(db, initialEmbedder(), appScope).also { store ->
+            // Upgrade lexical→semantic recall live once the embedder model lands.
+            appScope.launch {
+                modelManager.status(Models.EMBEDDER).collect { status ->
+                    if (status == ModelStatus.Ready && store.embedder.id != "mp-use-v1") {
+                        runCatching {
+                            store.embedder = MediaPipeEmbedder(this@KateApplication, modelManager.path(Models.EMBEDDER))
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private fun initialEmbedder() =
+        if (modelManager.isReady(Models.EMBEDDER)) {
+            runCatching {
+                MediaPipeEmbedder(this, modelManager.path(Models.EMBEDDER)) as tech.gonxt.kate.memory.Embedder
+            }.getOrDefault(HashingEmbedder())
+        } else HashingEmbedder()
+
+    val memoryRecall by lazy { MemoryRecall(memoryStore) }
+
+    val engine by lazy {
+        ConversationEngine(
+            brain = brainRouter,
+            tts = ttsRouter,
+            scope = appScope,
+            intercept = { memoryRecall.intercept(it) },
+            onTurn = { role, text, model, latencyMs -> memoryStore.onTurn(role, text, model, latencyMs) },
+            modelLabel = { brainRouter.activeLabel.value.lowercase() },
+        )
+    }
 
     /** Battery saver or serious thermal throttle → prefer the small model. */
     private fun isConstrained(): Boolean {

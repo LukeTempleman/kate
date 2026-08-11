@@ -4,7 +4,9 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import tech.gonxt.kate.models.ModelSpec
 import tech.gonxt.kate.service.KateVoiceService
@@ -25,6 +27,9 @@ class KateViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Which brain answered last (router updates it as turns route). */
     val activeBrainLabel: StateFlow<String> = kate.brainRouter.activeLabel
+
+    val memoryCount: StateFlow<Int> = kate.memoryStore.memoryCount
+        .stateIn(viewModelScope, SharingStarted.Eagerly, 0)
 
     val drivingMode = MutableStateFlow(false)
 

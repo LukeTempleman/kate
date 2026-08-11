@@ -2,6 +2,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.ksp)
 }
 
 android {
@@ -72,7 +73,11 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.commons.compress)
     implementation(libs.mediapipe.tasks.genai)
+    implementation(libs.mediapipe.tasks.text)
     implementation(libs.kotlinx.serialization.json)
+    implementation(libs.room.runtime)
+    implementation(libs.room.ktx)
+    ksp(libs.room.compiler)
     implementation(files("libs/sherpa-onnx-1.13.5.aar"))
 
     testImplementation(libs.junit)

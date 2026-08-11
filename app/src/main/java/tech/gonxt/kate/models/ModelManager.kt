@@ -12,7 +12,7 @@ import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
 
-enum class ModelKind { TTS_KOKORO, TTS_PIPER, VAD, STT, KWS, LLM }
+enum class ModelKind { TTS_KOKORO, TTS_PIPER, VAD, STT, KWS, LLM, EMBEDDING }
 
 data class ModelSpec(
     val id: String,
@@ -91,7 +91,16 @@ object Models {
         isArchive = false,
     )
 
-    val ALL = listOf(KOKORO, PIPER, SILERO_VAD, WHISPER_SMALL_EN, KWS_ZIPFORMER, LLM_PRIMARY, LLM_FALLBACK)
+    val EMBEDDER = ModelSpec(
+        id = "use-embedder",
+        displayName = "Memory embeddings (semantic recall)",
+        url = "https://storage.googleapis.com/mediapipe-models/text_embedder/universal_sentence_encoder/float32/latest/universal_sentence_encoder.tflite",
+        kind = ModelKind.EMBEDDING,
+        approxMB = 100,
+        isArchive = false,
+    )
+
+    val ALL = listOf(KOKORO, PIPER, SILERO_VAD, WHISPER_SMALL_EN, KWS_ZIPFORMER, LLM_PRIMARY, LLM_FALLBACK, EMBEDDER)
 }
 
 sealed interface ModelStatus {
