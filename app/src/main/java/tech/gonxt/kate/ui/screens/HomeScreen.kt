@@ -56,6 +56,7 @@ fun HomeScreen(
     val messages by vm.engine.messages.collectAsStateWithLifecycle()
     val partial by vm.engine.partialUserText.collectAsStateWithLifecycle()
     val brainLabel by vm.activeBrainLabel.collectAsStateWithLifecycle()
+    val earsStatus by vm.voicePipeline.status.collectAsStateWithLifecycle()
 
     Column(
         modifier = Modifier
@@ -71,11 +72,18 @@ fun HomeScreen(
         ) {
             Text("K A T E", style = MaterialTheme.typography.titleLarge, color = KateColors.Cyan)
             Spacer(Modifier.width(12.dp))
-            Text(
-                "BRAIN·$brainLabel",
-                style = MaterialTheme.typography.labelSmall,
-                color = KateColors.TextDim,
-            )
+            Column {
+                Text(
+                    "BRAIN·$brainLabel",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = KateColors.TextDim,
+                )
+                Text(
+                    earsStatus.uppercase(),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = KateColors.CyanDim,
+                )
+            }
             Spacer(Modifier.weight(1f))
             OutlinedButton(
                 onClick = onOpenDriving,

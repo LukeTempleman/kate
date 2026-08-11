@@ -112,6 +112,11 @@ fun VoiceLabScreen(vm: KateViewModel, onBack: () -> Unit) {
         Text("VOICE MODELS", style = MaterialTheme.typography.labelMedium, color = KateColors.CyanDim)
         ModelRow(vm, Models.KOKORO)
         ModelRow(vm, Models.PIPER)
+
+        Text("EAR MODELS", style = MaterialTheme.typography.labelMedium, color = KateColors.CyanDim)
+        ModelRow(vm, Models.KWS_ZIPFORMER)
+        ModelRow(vm, Models.SILERO_VAD)
+        ModelRow(vm, Models.WHISPER_SMALL_EN)
     }
 }
 

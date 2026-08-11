@@ -63,6 +63,25 @@ class ConversationEngine(
         }
     }
 
+    /** Real STT hooks (M1.3): the voice pipeline drives these three. */
+    fun beginListening() {
+        _partialUserText.value = ""
+        _orbState.value = OrbState.LISTENING
+    }
+
+    fun updatePartial(text: String) {
+        _partialUserText.value = text
+    }
+
+    fun submitUtterance(text: String) {
+        _partialUserText.value = ""
+        if (text.isBlank()) {
+            _orbState.value = OrbState.IDLE
+            return
+        }
+        turnJob = scope.launch { runTurn(text) }
+    }
+
     /** Voice lab: speak arbitrary text through the current TTS, no brain involved. */
     fun speakDirect(text: String) {
         if (text.isBlank()) return

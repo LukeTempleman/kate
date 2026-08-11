@@ -1,5 +1,8 @@
 package tech.gonxt.kate.ui.screens
 
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
@@ -24,6 +27,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import tech.gonxt.kate.KateViewModel
@@ -82,6 +86,27 @@ fun SettingsScreen(vm: KateViewModel, onBack: () -> Unit, onOpenVoiceLab: () -> 
         ToggleRow("Wake word (“Kate”)", s.wakeWordEnabled, vm::setWakeWord)
         ToggleRow("Latency readout", s.latencyReadout, vm::setLatencyReadout)
         ToggleRow("Auto driving mode on car Bluetooth", s.drivingModeAuto, vm::setDrivingModeAuto)
+
+        val ctx = LocalContext.current
+        OutlinedButton(
+            onClick = {
+                ctx.startActivity(
+                    Intent(
+                        Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                        Uri.parse("package:${ctx.packageName}"),
+                    ),
+                )
+            },
+            shape = RoundedCornerShape(6.dp),
+            border = BorderStroke(1.dp, KateColors.Line),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(
+                "ALLOW BACKGROUND LISTENING (BATTERY)",
+                style = MaterialTheme.typography.labelSmall,
+                color = KateColors.TextDim,
+            )
+        }
 
         if (s.latencyReadout) {
             SectionLabel("LAST TURN")
