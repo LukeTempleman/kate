@@ -8,6 +8,8 @@ import tech.gonxt.kate.skills.db.SkillDao
 import tech.gonxt.kate.skills.db.SkillEntity
 import tech.gonxt.kate.skills.db.SkillRunDao
 import tech.gonxt.kate.skills.db.SkillRunEntity
+import tech.gonxt.kate.sync.SyncLogDao
+import tech.gonxt.kate.sync.SyncLogEntity
 
 @Database(
     entities = [
@@ -18,8 +20,9 @@ import tech.gonxt.kate.skills.db.SkillRunEntity
         GraphEdgeEntity::class,
         SkillEntity::class,
         SkillRunEntity::class,
+        SyncLogEntity::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = false,
 )
 abstract class KateDb : RoomDatabase() {
@@ -29,6 +32,7 @@ abstract class KateDb : RoomDatabase() {
     abstract fun graph(): GraphDao
     abstract fun skills(): SkillDao
     abstract fun skillRuns(): SkillRunDao
+    abstract fun syncLog(): SyncLogDao
 
     companion object {
         fun build(context: Context): KateDb =

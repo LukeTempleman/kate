@@ -6,3 +6,5 @@
 -dontwarn com.google.auto.value.**
 # Vision-image API surface unused by Kate (text-only LLM sessions).
 -dontwarn com.google.mediapipe.framework.image.**
+# tasks-text pulls framework protos not shipped in the AAR.
+-dontwarn com.google.mediapipe.proto.**

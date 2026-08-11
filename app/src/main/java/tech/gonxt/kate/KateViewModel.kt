@@ -13,6 +13,7 @@ import tech.gonxt.kate.service.KateVoiceService
 import tech.gonxt.kate.settings.BrainMode
 import tech.gonxt.kate.settings.KateSettings
 import tech.gonxt.kate.settings.KateVoice
+import tech.gonxt.kate.sync.SyncEngine
 
 class KateViewModel(app: Application) : AndroidViewModel(app) {
 
@@ -94,4 +95,8 @@ class KateViewModel(app: Application) : AndroidViewModel(app) {
     fun downloadModel(spec: ModelSpec) = viewModelScope.launch { modelManager.download(spec) }
     fun deleteModel(spec: ModelSpec) = modelManager.delete(spec)
     fun speakDirect(text: String) = engine.speakDirect(text)
+
+    fun setPortalUrl(url: String) = viewModelScope.launch { settingsRepo.setPortalUrl(url) }
+    fun setPortalToken(t: String) = viewModelScope.launch { settingsRepo.setPortalToken(t) }
+    fun syncNow() = SyncEngine.syncNow(getApplication())
 }

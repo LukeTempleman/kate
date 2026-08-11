@@ -1,0 +1,31 @@
+{
+  "name": "kate-portal",
+  "main": "src/index.js",
+  "compatibility_date": "2026-08-01",
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "kate-db",
+      "database_id": "6ca1b698-9554-44af-a651-54f1ba21656b"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "ARTIFACTS",
+      "bucket_name": "kate-artifacts"
+    }
+  ],
+  "ai": {
+    "binding": "AI"
+  },
+  "triggers": {
+    "crons": ["0 2 * * *"]
+  },
+  "observability": {
+    "enabled": true
+  }
+}

@@ -38,31 +38,45 @@ class SkillRunWorker(context: Context, params: WorkerParameters) : CoroutineWork
         var prev = ""
         var artifactPath: String? = null
 
+        var ranOnCloud = false
         return try {
             for ((i, step) in skill.steps.withIndex()) {
                 log.appendLine("step ${i + 1}/${skill.steps.size}: ${step.type}")
                 when (step.type) {
                     "llm" -> {
-                        prev = askBrain(app, fillTemplate(step.prompt.orEmpty(), inputs, prev))
+                        val prompt = fillTemplate(step.prompt.orEmpty(), inputs, prev)
+                        prev = cloudStep(app, prompt)?.also { ranOnCloud = true } ?: askBrain(app, prompt)
                     }
                     "research" -> {
                         val q = fillTemplate(step.query.orEmpty(), inputs, prev)
-                        val research = askBrain(
-                            app,
-                            "Research task: $q\nList concrete findings (for scripture: book chapter:verse with the full text). Prior context:\n$prev",
-                        )
+                        val prompt = "Research task: $q\nList concrete findings (for scripture: book chapter:verse with the full text). Prior context:\n$prev"
+                        val research = cloudStep(app, prompt)?.also { ranOnCloud = true } ?: askBrain(app, prompt)
                         prev = "$prev\n\nRESEARCH NOTES:\n$research"
                     }
                     "save_artifact" -> {
                         val dir = File(app.getExternalFilesDir(null) ?: app.filesDir, "artifacts").apply { mkdirs() }
                         val f = File(dir, "${skill.id}-run$runId.md")
-                        f.writeText("# ${skill.name} — ${inputs.values.joinToString()}\n\n$prev\n")
+                        val content = "# ${skill.name} — ${inputs.values.joinToString()}\n\n$prev\n"
+                        f.writeText(content)
                         artifactPath = f.absolutePath
+                        uploadArtifact(app, "${skill.id}-run$runId.md", content)
                     }
                     else -> log.appendLine("unknown step type '${step.type}' skipped")
                 }
             }
             runs.markFinished(runId, "done", artifactPath, log.toString(), System.currentTimeMillis())
+            app.syncRecorder?.let { r ->
+                r.record(
+                    "skill_run", r.globalId(runId), "upsert",
+                    kotlinx.serialization.json.buildJsonObject {
+                        put("skill_id", kotlinx.serialization.json.JsonPrimitive(skill.id))
+                        put("status", kotlinx.serialization.json.JsonPrimitive("done"))
+                        put("ran_on", kotlinx.serialization.json.JsonPrimitive(if (ranOnCloud) "cloud" else "local"))
+                        put("artifact_r2_key", kotlinx.serialization.json.JsonPrimitive("${skill.id}-run$runId.md"))
+                        put("finished_at", kotlinx.serialization.json.JsonPrimitive(System.currentTimeMillis()))
+                    },
+                )
+            }
             app.skillManager.announce(skill, runId, success = true)
             Result.success()
         } catch (e: Exception) {
@@ -74,6 +88,54 @@ class SkillRunWorker(context: Context, params: WorkerParameters) : CoroutineWork
                 runs.markFinished(runId, "failed", artifactPath, log.toString(), System.currentTimeMillis())
                 app.skillManager.announce(skill, runId, success = false)
                 Result.failure()
+            }
+        }
+    }
+
+    /** Spec §2.5: once the portal exists, heavy steps run on Workers AI. */
+    private suspend fun cloudStep(app: KateApplication, prompt: String): String? {
+        val s = app.settings.value
+        if (s.portalToken.isBlank() || !tech.gonxt.kate.brain.isOnline(app)) return null
+        return runCatching {
+            val conn = java.net.URL("${s.portalUrl.trimEnd('/')}/api/ai/step")
+                .openConnection() as java.net.HttpURLConnection
+            try {
+                conn.requestMethod = "POST"
+                conn.doOutput = true
+                conn.connectTimeout = 15_000
+                conn.readTimeout = 120_000
+                conn.setRequestProperty("Authorization", "Bearer ${s.portalToken}")
+                conn.setRequestProperty("Content-Type", "application/json")
+                val body = kotlinx.serialization.json.buildJsonObject {
+                    put("prompt", kotlinx.serialization.json.JsonPrimitive(prompt))
+                }
+                conn.outputStream.use { it.write(body.toString().toByteArray()) }
+                check(conn.responseCode == 200) { "portal ${conn.responseCode}" }
+                val reply = kotlinx.serialization.json.Json.parseToJsonElement(
+                    conn.inputStream.bufferedReader().readText(),
+                ).let { it as kotlinx.serialization.json.JsonObject }
+                (reply["text"] as? kotlinx.serialization.json.JsonPrimitive)?.content?.takeIf { it.isNotBlank() }
+            } finally {
+                conn.disconnect()
+            }
+        }.getOrNull()
+    }
+
+    /** Artifacts → R2 through the portal; D1 keeps the key (spec §2.2 step 4). */
+    private fun uploadArtifact(app: KateApplication, key: String, content: String) {
+        val s = app.settings.value
+        if (s.portalToken.isBlank() || !tech.gonxt.kate.brain.isOnline(app)) return
+        runCatching {
+            val conn = java.net.URL("${s.portalUrl.trimEnd('/')}/api/artifact?key=$key")
+                .openConnection() as java.net.HttpURLConnection
+            try {
+                conn.requestMethod = "PUT"
+                conn.doOutput = true
+                conn.setRequestProperty("Authorization", "Bearer ${s.portalToken}")
+                conn.outputStream.use { it.write(content.toByteArray()) }
+                conn.responseCode
+            } finally {
+                conn.disconnect()
             }
         }
     }

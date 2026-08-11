@@ -19,9 +19,13 @@ import tech.gonxt.kate.memory.MediaPipeEmbedder
 import tech.gonxt.kate.memory.MemoryRecall
 import tech.gonxt.kate.memory.MemoryStore
 import tech.gonxt.kate.memory.db.KateDb
+import kotlinx.coroutines.runBlocking
 import tech.gonxt.kate.models.ModelStatus
 import tech.gonxt.kate.models.Models
 import tech.gonxt.kate.skills.SkillManager
+import tech.gonxt.kate.sync.Hlc
+import tech.gonxt.kate.sync.SyncEngine
+import tech.gonxt.kate.sync.SyncRecorder
 import tech.gonxt.kate.core.VoicePipeline
 import tech.gonxt.kate.models.ModelManager
 import tech.gonxt.kate.settings.KateSettings
@@ -58,8 +62,14 @@ class KateApplication : Application() {
 
     val db by lazy { KateDb.build(this) }
 
+    // Iteration 5: sync plumbing.
+    val deviceId: String by lazy { runBlocking { settingsRepository.deviceId() } }
+    val hlc by lazy { Hlc(deviceId) }
+    val syncRecorder: SyncRecorder? by lazy { SyncRecorder(db, hlc, deviceId) }
+    val syncEngine by lazy { SyncEngine(this, this) }
+
     val memoryStore by lazy {
-        MemoryStore(db, initialEmbedder(), appScope).also { store ->
+        MemoryStore(db, initialEmbedder(), appScope, recorder = syncRecorder).also { store ->
             // Upgrade lexical→semantic recall live once the embedder model lands.
             appScope.launch {
                 modelManager.status(Models.EMBEDDER).collect { status ->
@@ -82,7 +92,14 @@ class KateApplication : Application() {
 
     val memoryRecall by lazy { MemoryRecall(memoryStore) }
 
-    val skillManager by lazy { SkillManager(this, db, brainRouter, appScope) { engine } }
+    val skillManager by lazy {
+        SkillManager(this, db, brainRouter, appScope) { engine }.also { it.recorder = syncRecorder }
+    }
+
+    override fun onCreate() {
+        super.onCreate()
+        SyncEngine.schedule(this)
+    }
 
     val engine: ConversationEngine by lazy {
         ConversationEngine(

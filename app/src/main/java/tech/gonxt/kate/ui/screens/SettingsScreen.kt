@@ -144,6 +144,18 @@ fun SettingsScreen(vm: KateViewModel, onBack: () -> Unit, onOpenVoiceLab: () -> 
         KeyField("Groq API key (online brain)", s.groqApiKey, vm::setGroqApiKey)
         KeyField("Picovoice access key (wake word)", s.picovoiceAccessKey, vm::setPicovoiceAccessKey)
 
+        SectionLabel("PORTAL SYNC")
+        KeyField("Portal URL", s.portalUrl, vm::setPortalUrl)
+        KeyField("Portal token", s.portalToken, vm::setPortalToken)
+        OutlinedButton(
+            onClick = vm::syncNow,
+            shape = RoundedCornerShape(6.dp),
+            border = BorderStroke(1.dp, KateColors.CyanDim),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text("SYNC NOW", style = MaterialTheme.typography.labelMedium, color = KateColors.Cyan)
+        }
+
         Text(
             "kate 0.1.0 · iteration 1 · milestone 1.1",
             style = MaterialTheme.typography.labelSmall,

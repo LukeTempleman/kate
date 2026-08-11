@@ -119,17 +119,32 @@ inputs of type voice_string; prompts may use {input_name} and {prev}. Reply with
 
     suspend fun save(def: SkillDef, createdVia: String) {
         val existing = db.skills().byId(def.id)
+        val version = (existing?.version ?: 0) + 1
+        val updatedAt = System.currentTimeMillis()
         db.skills().upsert(
             SkillEntity(
                 id = def.id,
                 name = def.name,
                 definitionJson = encodeSkill(def),
-                version = (existing?.version ?: 0) + 1,
+                version = version,
                 createdVia = createdVia,
-                updatedAt = System.currentTimeMillis(),
+                updatedAt = updatedAt,
             ),
         )
+        recorder?.record(
+            "skill", def.id, "upsert",
+            kotlinx.serialization.json.buildJsonObject {
+                put("name", kotlinx.serialization.json.JsonPrimitive(def.name))
+                put("definition_json", kotlinx.serialization.json.JsonPrimitive(encodeSkill(def)))
+                put("version", kotlinx.serialization.json.JsonPrimitive(version))
+                put("created_via", kotlinx.serialization.json.JsonPrimitive(createdVia))
+                put("updated_at", kotlinx.serialization.json.JsonPrimitive(updatedAt))
+            },
+        )
     }
+
+    /** Iteration 5: skills + runs also flow into the sync log. */
+    var recorder: tech.gonxt.kate.sync.SyncRecorder? = null
 
     private suspend fun findSkill(nameOrTrigger: String): SkillEntity? {
         val needle = nameOrTrigger.lowercase().trim()
@@ -141,17 +156,30 @@ inputs of type voice_string; prompts may use {input_name} and {prev}. Reply with
     }
 
     suspend fun enqueue(def: SkillDef, inputs: Map<String, String>): Long {
+        val inputsJson = kotlinx.serialization.json.Json.encodeToString(
+            MapSerializer(String.serializer(), String.serializer()),
+            inputs,
+        )
+        val status = if (def.requiresOnline && !isOnline(context)) "pending-online" else "queued"
         val runId = db.skillRuns().insert(
             SkillRunEntity(
                 skillId = def.id,
-                inputsJson = kotlinx.serialization.json.Json.encodeToString(
-                    MapSerializer(String.serializer(), String.serializer()),
-                    inputs,
-                ),
-                status = if (def.requiresOnline && !isOnline(context)) "pending-online" else "queued",
+                inputsJson = inputsJson,
+                status = status,
                 createdAt = System.currentTimeMillis(),
             ),
         )
+        recorder?.let { r ->
+            r.record(
+                "skill_run", r.globalId(runId), "upsert",
+                kotlinx.serialization.json.buildJsonObject {
+                    put("skill_id", kotlinx.serialization.json.JsonPrimitive(def.id))
+                    put("inputs_json", kotlinx.serialization.json.JsonPrimitive(inputsJson))
+                    put("status", kotlinx.serialization.json.JsonPrimitive(status))
+                    put("ran_on", kotlinx.serialization.json.JsonPrimitive("local"))
+                },
+            )
+        }
         val request = OneTimeWorkRequestBuilder<SkillRunWorker>()
             .setInputData(workDataOf(SkillRunWorker.KEY_RUN_ID to runId))
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
