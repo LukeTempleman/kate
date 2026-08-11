@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KATE — releases</title>
+<style>
+  body { background:#050A0D; color:#D9F6FB; font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+         display:flex; min-height:100dvh; align-items:center; justify-content:center; margin:0; }
+  .card { text-align:center; padding:2rem; }
+  h1 { color:#00E5FF; font-weight:300; letter-spacing:.5em; margin-bottom:.2em; }
+  p { color:#6E8C96; font-size:.9rem; }
+  a.btn { display:inline-block; margin-top:1.5rem; padding:1rem 2.5rem; border:1px solid #00E5FF;
+          color:#00E5FF; text-decoration:none; border-radius:8px; letter-spacing:.2em; }
+  a.btn:active { background:#00E5FF22; }
+  .orb { width:120px; height:120px; margin:0 auto 1.5rem; border:2px solid #00E5FF; border-radius:50%;
+         position:relative; animation:breathe 4s ease-in-out infinite; box-shadow:0 0 60px #00E5FF33; }
+  .orb::after { content:""; position:absolute; inset:42%; background:#00E5FF; border-radius:50%; }
+  @keyframes breathe { 0%,100%{transform:scale(1)} 50%{transform:scale(1.05)} }
+  .meta { margin-top:2rem; font-size:.75rem; color:#6E8C96; line-height:1.7; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="orb"></div>
+  <h1>KATE</h1>
+  <p>personal AI voice assistant — iteration 1, milestone 1.1</p>
+  <a class="btn" href="kate-0.1.0.apk">DOWNLOAD APK · v0.1.0</a>
+  <div class="meta">
+    2.3 MB · Android 12+ · arm64<br>
+    app shell · living orb · streaming transcript · driving mode · dummy brain<br>
+    voice (Kokoro), ears (whisper) and brain (Groq / on-device) land in the next milestones
+  </div>
+</div>
+</body>
+</html>

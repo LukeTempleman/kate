@@ -8,9 +8,11 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import tech.gonxt.kate.audio.DummyTts
+import tech.gonxt.kate.audio.TtsRouter
 import tech.gonxt.kate.brain.DummyBrain
 import tech.gonxt.kate.core.ConversationEngine
+import tech.gonxt.kate.models.ModelManager
+import tech.gonxt.kate.models.ModelSpec
 import tech.gonxt.kate.settings.BrainMode
 import tech.gonxt.kate.settings.KateSettings
 import tech.gonxt.kate.settings.KateVoice
@@ -23,11 +25,19 @@ class KateViewModel(app: Application) : AndroidViewModel(app) {
     val settings: StateFlow<KateSettings> = settingsRepo.settings
         .stateIn(viewModelScope, SharingStarted.Eagerly, KateSettings())
 
+    val modelManager = ModelManager(app)
+
+    val ttsRouter = TtsRouter(app, modelManager, settings, viewModelScope)
+
     val engine = ConversationEngine(
         brain = DummyBrain(),
-        tts = DummyTts(),
+        tts = ttsRouter,
         scope = viewModelScope,
     )
+
+    fun downloadModel(spec: ModelSpec) = viewModelScope.launch { modelManager.download(spec) }
+    fun deleteModel(spec: ModelSpec) = modelManager.delete(spec)
+    fun speakDirect(text: String) = engine.speakDirect(text)
 
     /** Which brain is actually behind the orb right now (M1.1: always dummy). */
     val activeBrainLabel = MutableStateFlow("DUMMY")

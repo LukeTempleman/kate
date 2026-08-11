@@ -2,6 +2,8 @@ package tech.gonxt.kate.core
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -61,6 +63,23 @@ class ConversationEngine(
         }
     }
 
+    /** Voice lab: speak arbitrary text through the current TTS, no brain involved. */
+    fun speakDirect(text: String) {
+        if (text.isBlank()) return
+        bargeIn()
+        turnJob = scope.launch {
+            _orbState.value = OrbState.SPEAKING
+            try {
+                val chunker = SentenceChunker()
+                val sentences = chunker.feed(text) + listOfNotNull(chunker.flush())
+                for (s in sentences) tts.speak(s)
+            } finally {
+                tts.stop()
+                _orbState.value = OrbState.IDLE
+            }
+        }
+    }
+
     /** Cuts Kate off instantly — wake word during playback, or a new send. */
     fun bargeIn() {
         turnJob?.cancel()
@@ -82,39 +101,41 @@ class ConversationEngine(
         _messages.value += ChatMessage(kateId, Role.KATE, "", streaming = true)
 
         val chunker = SentenceChunker()
-        val pendingSentences = ArrayDeque<String>()
         var firstToken = true
-        var speaking = false
-
-        suspend fun speakQueued() {
-            while (pendingSentences.isNotEmpty()) {
-                val s = pendingSentences.removeFirst()
-                if (!speaking) {
-                    speaking = true
-                    latency.mark("first_speech")
-                    _orbState.value = OrbState.SPEAKING
-                }
-                tts.speak(s)
-            }
-        }
 
         try {
-            brain.reply(_messages.value.filter { !it.streaming }).collect { token ->
-                if (firstToken) {
-                    firstToken = false
-                    latency.mark("first_token")
+            coroutineScope {
+                // Kate speaks sentence #1 while sentence #2 is still generating:
+                // synthesis consumes this queue in parallel with token collection.
+                val sentences = Channel<String>(Channel.UNLIMITED)
+                val speaker = launch {
+                    var first = true
+                    for (s in sentences) {
+                        if (first) {
+                            first = false
+                            latency.mark("first_speech")
+                            _orbState.value = OrbState.SPEAKING
+                        }
+                        tts.speak(s)
+                    }
                 }
-                updateStreaming(kateId) { it + token }
-                pendingSentences += chunker.feed(token)
-                // M1.1: dummy TTS is fast enough to speak inline between tokens.
-                // M1.2 moves synthesis to a parallel queue so generation never waits.
-                speakQueued()
+
+                brain.reply(_messages.value.filter { !it.streaming }).collect { token ->
+                    if (firstToken) {
+                        firstToken = false
+                        latency.mark("first_token")
+                    }
+                    updateStreaming(kateId) { it + token }
+                    chunker.feed(token).forEach { sentences.send(it) }
+                }
+                chunker.flush()?.let { sentences.send(it) }
+                updateStreaming(kateId, markDone = true) { it.trimEnd() }
+                latency.mark("gen_done")
+                sentences.close()
+                speaker.join()
+                latency.mark("speech_done")
+                latency.complete()
             }
-            chunker.flush()?.let { pendingSentences += it }
-            speakQueued()
-            updateStreaming(kateId, markDone = true) { it.trimEnd() }
-            latency.mark("done")
-            latency.complete()
         } finally {
             tts.stop()
             _orbState.value = OrbState.IDLE

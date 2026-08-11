@@ -32,7 +32,7 @@ import tech.gonxt.kate.settings.KateVoice
 import tech.gonxt.kate.ui.theme.KateColors
 
 @Composable
-fun SettingsScreen(vm: KateViewModel, onBack: () -> Unit) {
+fun SettingsScreen(vm: KateViewModel, onBack: () -> Unit, onOpenVoiceLab: () -> Unit = {}) {
     val s by vm.settings.collectAsStateWithLifecycle()
     val lastTurn by vm.engine.lastTurnLatency.collectAsStateWithLifecycle()
 
@@ -62,6 +62,14 @@ fun SettingsScreen(vm: KateViewModel, onBack: () -> Unit) {
             selected = s.voice.ordinal,
             onSelect = { vm.setVoice(KateVoice.entries[it]) },
         )
+        OutlinedButton(
+            onClick = onOpenVoiceLab,
+            shape = RoundedCornerShape(6.dp),
+            border = BorderStroke(1.dp, KateColors.CyanDim),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text("OPEN VOICE LAB · MODELS & TEST", style = MaterialTheme.typography.labelMedium, color = KateColors.Cyan)
+        }
 
         SectionLabel("BRAIN")
         ChoiceRow(
