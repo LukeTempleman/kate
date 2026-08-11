@@ -98,8 +98,25 @@ class KateApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        installCrashLogger()
         SyncEngine.schedule(this)
     }
+
+    /** Remote-debuggable crashes: stack trace lands in a file Settings can show. */
+    private fun installCrashLogger() {
+        val previous = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, e ->
+            runCatching {
+                crashFile().writeText(
+                    "${java.util.Date()}\nthread: ${thread.name}\n" +
+                        android.util.Log.getStackTraceString(e),
+                )
+            }
+            previous?.uncaughtException(thread, e)
+        }
+    }
+
+    fun crashFile(): java.io.File = java.io.File(filesDir, "last_crash.txt")
 
     val engine: ConversationEngine by lazy {
         ConversationEngine(

@@ -25,6 +25,7 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -156,8 +157,33 @@ fun SettingsScreen(vm: KateViewModel, onBack: () -> Unit, onOpenVoiceLab: () -> 
             Text("SYNC NOW", style = MaterialTheme.typography.labelMedium, color = KateColors.Cyan)
         }
 
+        val crashFile = (ctx.applicationContext as? tech.gonxt.kate.KateApplication)?.crashFile()
+        var crashText by androidx.compose.runtime.remember {
+            androidx.compose.runtime.mutableStateOf(
+                crashFile?.takeIf { it.exists() }?.readText().orEmpty(),
+            )
+        }
+        if (crashText.isNotEmpty()) {
+            SectionLabel("LAST CRASH")
+            Text(
+                crashText.take(2500),
+                style = MaterialTheme.typography.bodySmall,
+                color = KateColors.Danger,
+            )
+            OutlinedButton(
+                onClick = {
+                    crashFile?.delete()
+                    crashText = ""
+                },
+                shape = RoundedCornerShape(6.dp),
+                border = BorderStroke(1.dp, KateColors.Line),
+            ) {
+                Text("CLEAR", style = MaterialTheme.typography.labelSmall, color = KateColors.TextDim)
+            }
+        }
+
         Text(
-            "kate 0.1.0 · iteration 1 · milestone 1.1",
+            "kate 0.4.2",
             style = MaterialTheme.typography.labelSmall,
             color = KateColors.TextDim,
             modifier = Modifier.padding(top = 8.dp, bottom = 24.dp),

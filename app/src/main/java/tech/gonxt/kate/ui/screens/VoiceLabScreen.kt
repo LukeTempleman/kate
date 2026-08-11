@@ -122,7 +122,10 @@ fun VoiceLabScreen(vm: KateViewModel, onBack: () -> Unit) {
 
 @Composable
 fun ModelRow(vm: KateViewModel, spec: ModelSpec) {
+    // Capture once per composition: the flow can flip Downloading→Extracting mid-frame,
+    // and a stale smart-cast in the progress lambda crashes the app.
     val status by vm.modelManager.status(spec).collectAsStateWithLifecycle()
+    val st = status
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -134,7 +137,7 @@ fun ModelRow(vm: KateViewModel, spec: ModelSpec) {
             Column(Modifier.weight(1f)) {
                 Text(spec.displayName, style = MaterialTheme.typography.bodyMedium, color = KateColors.Text)
                 Text(
-                    "~${spec.approxMB} MB · " + when (val st = status) {
+                    "~${spec.approxMB} MB · " + when (st) {
                         ModelStatus.NotDownloaded -> "not downloaded"
                         is ModelStatus.Downloading -> "downloading ${(st.progress * 100).toInt()}%"
                         ModelStatus.Extracting -> "extracting…"
@@ -142,10 +145,10 @@ fun ModelRow(vm: KateViewModel, spec: ModelSpec) {
                         is ModelStatus.Failed -> "failed: ${st.reason}"
                     },
                     style = MaterialTheme.typography.bodySmall,
-                    color = if (status == ModelStatus.Ready) KateColors.Cyan else KateColors.TextDim,
+                    color = if (st == ModelStatus.Ready) KateColors.Cyan else KateColors.TextDim,
                 )
             }
-            when (status) {
+            when (st) {
                 ModelStatus.NotDownloaded, is ModelStatus.Failed -> OutlinedButton(
                     onClick = { vm.downloadModel(spec) },
                     shape = RoundedCornerShape(6.dp),
@@ -163,9 +166,9 @@ fun ModelRow(vm: KateViewModel, spec: ModelSpec) {
                 else -> {}
             }
         }
-        if (status is ModelStatus.Downloading) {
+        if (st is ModelStatus.Downloading) {
             LinearProgressIndicator(
-                progress = { (status as ModelStatus.Downloading).progress },
+                progress = { st.progress },
                 modifier = Modifier.fillMaxWidth(),
                 color = KateColors.Cyan,
                 trackColor = KateColors.Line,
