@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -23,10 +25,15 @@ android {
 
     signingConfigs {
         create("release") {
-            storeFile = rootProject.file("keystore/kate-release.keystore")
-            storePassword = "kate-release-2026"
+            // Keystore + password stay out of the repo: local.properties (gitignored).
+            val props = Properties().apply {
+                val f = rootProject.file("local.properties")
+                if (f.exists()) f.inputStream().use { load(it) }
+            }
+            storeFile = rootProject.file(props.getProperty("kate.store.file") ?: "keystore/kate-release.keystore")
+            storePassword = props.getProperty("kate.store.password") ?: ""
             keyAlias = "kate"
-            keyPassword = "kate-release-2026"
+            keyPassword = props.getProperty("kate.store.password") ?: ""
         }
     }
 
