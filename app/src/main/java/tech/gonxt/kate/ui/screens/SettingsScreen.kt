@@ -31,6 +31,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import tech.gonxt.kate.KateViewModel
+import tech.gonxt.kate.models.Models
 import tech.gonxt.kate.settings.BrainMode
 import tech.gonxt.kate.settings.KateVoice
 import tech.gonxt.kate.ui.theme.KateColors
@@ -81,6 +82,8 @@ fun SettingsScreen(vm: KateViewModel, onBack: () -> Unit, onOpenVoiceLab: () -> 
             selected = s.brainMode.ordinal,
             onSelect = { vm.setBrainMode(BrainMode.entries[it]) },
         )
+        ModelRow(vm, Models.LLM_PRIMARY)
+        ModelRow(vm, Models.LLM_FALLBACK)
 
         SectionLabel("BEHAVIOUR")
         ToggleRow("Wake word (“Kate”)", s.wakeWordEnabled, vm::setWakeWord)

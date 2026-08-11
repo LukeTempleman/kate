@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.kotlin.serialization)
 }
 
 android {
@@ -70,6 +71,8 @@ dependencies {
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.commons.compress)
+    implementation(libs.mediapipe.tasks.genai)
+    implementation(libs.kotlinx.serialization.json)
     implementation(files("libs/sherpa-onnx-1.13.5.aar"))
 
     testImplementation(libs.junit)

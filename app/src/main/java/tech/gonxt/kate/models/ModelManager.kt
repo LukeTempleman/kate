@@ -12,7 +12,7 @@ import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
 
-enum class ModelKind { TTS_KOKORO, TTS_PIPER, VAD, STT, KWS }
+enum class ModelKind { TTS_KOKORO, TTS_PIPER, VAD, STT, KWS, LLM }
 
 data class ModelSpec(
     val id: String,
@@ -71,7 +71,27 @@ object Models {
         archiveRoot = "sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01-mobile",
     )
 
-    val ALL = listOf(KOKORO, PIPER, SILERO_VAD, WHISPER_SMALL_EN, KWS_ZIPFORMER)
+    // Spec M1.4 names Llama 3.1 8B / 3.2 3B, but Meta-licensed LiteRT builds are
+    // gated on HF; Qwen3 8B int4 (4.9GB, same budget) and 1.7B are the ungated equivalents.
+    val LLM_PRIMARY = ModelSpec(
+        id = "qwen3-8b-int4",
+        displayName = "Offline brain — Qwen3 8B (4-bit)",
+        url = "https://huggingface.co/litert-community/Qwen3-8B/resolve/main/qwen3_8b_mixed_int4.litertlm",
+        kind = ModelKind.LLM,
+        approxMB = 4890,
+        isArchive = false,
+    )
+
+    val LLM_FALLBACK = ModelSpec(
+        id = "qwen3-1_7b-int4",
+        displayName = "Offline brain — Qwen3 1.7B (low power)",
+        url = "https://huggingface.co/litert-community/Qwen3-1.7B/resolve/main/Qwen3-1.7B_dynamic_wi4b32_afp32.litertlm",
+        kind = ModelKind.LLM,
+        approxMB = 980,
+        isArchive = false,
+    )
+
+    val ALL = listOf(KOKORO, PIPER, SILERO_VAD, WHISPER_SMALL_EN, KWS_ZIPFORMER, LLM_PRIMARY, LLM_FALLBACK)
 }
 
 sealed interface ModelStatus {

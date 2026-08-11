@@ -23,8 +23,8 @@ class KateViewModel(app: Application) : AndroidViewModel(app) {
     val engine = kate.engine
     val voicePipeline = kate.voicePipeline
 
-    /** Which brain is actually behind the orb right now (dummy until M1.4). */
-    val activeBrainLabel = MutableStateFlow("DUMMY")
+    /** Which brain answered last (router updates it as turns route). */
+    val activeBrainLabel: StateFlow<String> = kate.brainRouter.activeLabel
 
     val drivingMode = MutableStateFlow(false)
 

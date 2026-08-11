@@ -67,6 +67,7 @@ class ConversationEngine(
     fun beginListening() {
         _partialUserText.value = ""
         _orbState.value = OrbState.LISTENING
+        latency.begin("wake")
     }
 
     fun updatePartial(text: String) {
@@ -79,7 +80,8 @@ class ConversationEngine(
             _orbState.value = OrbState.IDLE
             return
         }
-        turnJob = scope.launch { runTurn(text) }
+        latency.mark("stt_final")
+        turnJob = scope.launch { runTurn(text, alreadyMarked = true) }
     }
 
     /** Voice lab: speak arbitrary text through the current TTS, no brain involved. */
