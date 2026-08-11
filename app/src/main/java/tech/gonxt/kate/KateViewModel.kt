@@ -31,6 +31,18 @@ class KateViewModel(app: Application) : AndroidViewModel(app) {
     val memoryCount: StateFlow<Int> = kate.memoryStore.memoryCount
         .stateIn(viewModelScope, SharingStarted.Eagerly, 0)
 
+    // Dashboard flows (Iteration 4)
+    val graphNodes = kate.memoryStore.graphNodes.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
+    val graphEdges = kate.memoryStore.graphEdges.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
+    val kateAnswers = kate.memoryStore.kateAnswers.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
+    val skills = kate.skillManager.skills.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
+    val skillRuns = kate.skillManager.runs.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
+
+    suspend fun nodeDetail(nodeId: Long): String? = kate.memoryStore.nodeDetail(nodeId)
+    fun deleteNode(nodeId: Long) = viewModelScope.launch { kate.memoryStore.deleteNode(nodeId) }
+    fun pinNode(nodeId: Long) = viewModelScope.launch { kate.memoryStore.pinNode(nodeId) }
+    fun rateTurn(turnId: Long, rating: Int) = viewModelScope.launch { kate.memoryStore.rateTurn(turnId, rating) }
+
     val drivingMode = MutableStateFlow(false)
 
     private val demoUtterances = listOf(

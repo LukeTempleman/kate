@@ -8,6 +8,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import tech.gonxt.kate.KateViewModel
+import tech.gonxt.kate.ui.screens.DashboardScreen
 import tech.gonxt.kate.ui.screens.DrivingScreen
 import tech.gonxt.kate.ui.screens.HomeScreen
 import tech.gonxt.kate.ui.screens.SettingsScreen
@@ -18,6 +19,7 @@ object Routes {
     const val SETTINGS = "settings"
     const val DRIVING = "driving"
     const val VOICE_LAB = "voice_lab"
+    const val DASHBOARD = "dashboard"
 }
 
 @Composable
@@ -38,7 +40,11 @@ fun KateApp(vm: KateViewModel) {
                 vm = vm,
                 onOpenSettings = { nav.navigate(Routes.SETTINGS) },
                 onOpenDriving = { vm.setDrivingMode(true) },
+                onOpenDashboard = { nav.navigate(Routes.DASHBOARD) },
             )
+        }
+        composable(Routes.DASHBOARD) {
+            DashboardScreen(vm = vm, onBack = { nav.popBackStack() })
         }
         composable(Routes.SETTINGS) {
             SettingsScreen(

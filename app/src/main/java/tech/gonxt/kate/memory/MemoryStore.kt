@@ -122,4 +122,26 @@ class MemoryStore(
     }
 
     suspend fun rateTurn(turnId: Long, rating: Int) = db.turns().rate(turnId, rating)
+
+    // Dashboard graph editing (spec Iteration 4: tap to expand, edit/delete/pin).
+
+    suspend fun nodeDetail(nodeId: Long): String? {
+        val node = db.graph().nodeById(nodeId) ?: return null
+        val mem = node.memoryId?.let { db.memories().byId(it) }
+        return mem?.content ?: node.label
+    }
+
+    suspend fun deleteNode(nodeId: Long) {
+        val node = db.graph().nodeById(nodeId) ?: return
+        db.graph().deleteEdgesFor(nodeId)
+        db.graph().deleteNode(nodeId)
+        node.memoryId?.let { db.memories().tombstone(it) }
+    }
+
+    suspend fun pinNode(nodeId: Long): Boolean {
+        val node = db.graph().nodeById(nodeId) ?: return false
+        val memId = node.memoryId ?: return false
+        db.memories().setPinned(memId, true)
+        return true
+    }
 }

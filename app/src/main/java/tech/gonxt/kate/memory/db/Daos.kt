@@ -51,6 +51,9 @@ interface MemoryDao {
 
     @Query("SELECT COUNT(*) FROM memories WHERE deleted = 0")
     fun count(): Flow<Int>
+
+    @Query("SELECT * FROM memories WHERE id = :id")
+    suspend fun byId(id: Long): MemoryEntity?
 }
 
 @Dao
@@ -78,6 +81,9 @@ interface GraphDao {
 
     @Query("DELETE FROM graph_nodes WHERE id = :id")
     suspend fun deleteNode(id: Long)
+
+    @Query("SELECT * FROM graph_nodes WHERE id = :id")
+    suspend fun nodeById(id: Long): GraphNodeEntity?
 
     @Query("DELETE FROM graph_edges WHERE fromNode = :nodeId OR toNode = :nodeId")
     suspend fun deleteEdgesFor(nodeId: Long)

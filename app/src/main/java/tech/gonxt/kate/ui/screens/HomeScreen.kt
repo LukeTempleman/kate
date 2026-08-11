@@ -50,6 +50,7 @@ fun HomeScreen(
     vm: KateViewModel,
     onOpenSettings: () -> Unit,
     onOpenDriving: () -> Unit,
+    onOpenDashboard: () -> Unit = {},
 ) {
     val orbState by vm.engine.orbState.collectAsStateWithLifecycle()
     val amplitude by vm.engine.speakingAmplitude.collectAsStateWithLifecycle()
@@ -86,9 +87,19 @@ fun HomeScreen(
             }
             Spacer(Modifier.weight(1f))
             OutlinedButton(
+                onClick = onOpenDashboard,
+                shape = RoundedCornerShape(6.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, KateColors.Line),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp),
+            ) {
+                Text("DASH", style = MaterialTheme.typography.labelMedium, color = KateColors.TextDim)
+            }
+            Spacer(Modifier.width(6.dp))
+            OutlinedButton(
                 onClick = onOpenDriving,
                 shape = RoundedCornerShape(6.dp),
                 border = androidx.compose.foundation.BorderStroke(1.dp, KateColors.Line),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp),
             ) {
                 Text("DRIVE", style = MaterialTheme.typography.labelMedium, color = KateColors.Cyan)
             }
