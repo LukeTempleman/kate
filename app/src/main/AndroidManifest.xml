@@ -11,7 +11,7 @@
 
     <application
         android:name=".KateApplication"
-        android:label="Kate"
+        android:label="Moneypenny"
         android:icon="@mipmap/ic_launcher"
         android:supportsRtl="true"
         android:theme="@style/Theme.Kate">

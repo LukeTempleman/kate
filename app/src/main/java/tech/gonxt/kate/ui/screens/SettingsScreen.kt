@@ -183,7 +183,7 @@ fun SettingsScreen(vm: KateViewModel, onBack: () -> Unit, onOpenVoiceLab: () -> 
         }
 
         Text(
-            "kate 0.4.3",
+            "moneypenny 0.5.0",
             style = MaterialTheme.typography.labelSmall,
             color = KateColors.TextDim,
             modifier = Modifier.padding(top = 8.dp, bottom = 24.dp),

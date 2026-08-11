@@ -18,12 +18,12 @@ object RecallIntents {
     )
 
     private val FORGET = Regex(
-        "^(?:kate[,;]?\\s*)?forget (?:that|it|this|what i just said)\\.?$",
+        "^(?:(?:kate|moneypenny)[,;]?\\s*)?forget (?:that|it|this|what i just said)\\.?$",
         RegexOption.IGNORE_CASE,
     )
 
     private val PIN = Regex(
-        "^(?:kate[,;]?\\s*)?(?:pin (?:that|this|it)|remember (?:that|this) (?:forever|permanently)|never forget (?:that|this))\\.?$",
+        "^(?:(?:kate|moneypenny)[,;]?\\s*)?(?:pin (?:that|this|it)|remember (?:that|this) (?:forever|permanently)|never forget (?:that|this))\\.?$",
         RegexOption.IGNORE_CASE,
     )
 

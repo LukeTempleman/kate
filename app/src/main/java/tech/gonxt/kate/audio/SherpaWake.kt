@@ -9,15 +9,16 @@ import com.k2fsa.sherpa.onnx.OnlineTransducerModelConfig
 import java.io.File
 
 /**
- * "Kate" wake word via sherpa-onnx KeywordSpotter (zipformer KWS, gigaspeech BPE).
- * OSS alternative to Porcupine allowed by spec §1.1 — no access key, fully offline.
+ * "Moneypenny" wake word via sherpa-onnx KeywordSpotter (zipformer KWS, gigaspeech
+ * BPE). OSS alternative to Porcupine allowed by spec §1.1 — no key, fully offline.
  *
- * "KATE" BPE-encodes to `▁K ATE` with this model's bpe.model (verified against
- * tokens.txt: ▁K=164, ATE=155; no ▁KATE merge exists).
+ * Both plausible BPE segmentations of MONEYPENNY are registered (pieces verified
+ * against tokens.txt: ▁MONEY=482, PE=158, P=26, EN=63, N=9, Y=17); "Kate" kept
+ * as a short alias.
  */
 class SherpaWake(
     modelDir: File,
-    keywords: String = "▁K ATE @kate",
+    keywords: String = "▁MONEY PE N N Y @moneypenny\n▁MONEY P EN N Y @moneypenny2\n▁K ATE @kate",
     threshold: Float = 0.25f,
 ) {
     private val spotter: KeywordSpotter

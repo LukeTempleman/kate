@@ -17,7 +17,7 @@ object TopicExtractor {
         "it", "we", "they", "me", "him", "her", "us", "them", "my", "your", "his", "its",
         "our", "their", "this", "that", "these", "those", "what", "which", "who", "whom",
         "when", "where", "why", "how", "not", "no", "yes", "please", "kate", "hey", "ok",
-        "okay", "just", "really", "very", "some", "any", "tell", "say", "said", "know",
+        "okay", "moneypenny", "penny", "just", "really", "very", "some", "any", "tell", "say", "said", "know",
         "think", "want", "like", "get", "got", "make", "go", "going", "there", "here",
         "up", "down", "out", "as", "by", "from", "am", "pm", "dont", "im", "its", "thats",
     )

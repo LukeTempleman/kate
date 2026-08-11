@@ -75,7 +75,7 @@ fun VoiceLabScreen(vm: KateViewModel, onBack: () -> Unit) {
         }
 
         var text by remember {
-            mutableStateOf("Hello, I'm Kate. This is my real voice — synthesised entirely on your phone, no cloud involved.")
+            mutableStateOf("Hello, I'm Moneypenny. This is my real voice — synthesised entirely on your phone, no cloud involved.")
         }
         OutlinedTextField(
             value = text,

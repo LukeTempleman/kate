@@ -22,7 +22,7 @@ class KateVoiceService : Service() {
     override fun onCreate() {
         super.onCreate()
         val channel = NotificationChannel(
-            CHANNEL_ID, "Kate ears", NotificationManager.IMPORTANCE_MIN,
+            CHANNEL_ID, "Moneypenny ears", NotificationManager.IMPORTANCE_MIN,
         ).apply { description = "Wake-word listening" }
         getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
     }
@@ -53,8 +53,8 @@ class KateVoiceService : Service() {
         )
         return Notification.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
-            .setContentTitle("Kate")
-            .setContentText("Listening for “Kate”")
+            .setContentTitle("Moneypenny")
+            .setContentText("Listening for “Moneypenny”")
             .setContentIntent(tapIntent)
             .setOngoing(true)
             .build()
