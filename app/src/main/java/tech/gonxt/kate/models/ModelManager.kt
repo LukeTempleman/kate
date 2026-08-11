@@ -14,6 +14,8 @@ import java.net.URL
 
 enum class ModelKind { TTS_KOKORO, TTS_PIPER, VAD, STT, KWS, LLM, EMBEDDING }
 
+enum class PromptStyle { CHATML, PHI }
+
 data class ModelSpec(
     val id: String,
     val displayName: String,
@@ -23,12 +25,13 @@ data class ModelSpec(
     /** true = tar.bz2 archive with a top-level directory named [archiveRoot]. */
     val isArchive: Boolean = true,
     val archiveRoot: String = "",
+    val promptStyle: PromptStyle = PromptStyle.CHATML,
 )
 
 object Models {
     val KOKORO = ModelSpec(
         id = "kokoro-int8-v1_0",
-        displayName = "Kokoro voice (Emma & Isabella)",
+        displayName = "Her voice (Emma & Isabella)",
         url = "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/kokoro-int8-multi-lang-v1_0.tar.bz2",
         kind = ModelKind.TTS_KOKORO,
         approxMB = 132,
@@ -37,7 +40,7 @@ object Models {
 
     val PIPER = ModelSpec(
         id = "piper-en_gb-jenny-int8",
-        displayName = "Piper fallback voice (en_GB)",
+        displayName = "Backup voice (battery saver)",
         url = "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-en_GB-jenny_dioco-medium-int8.tar.bz2",
         kind = ModelKind.TTS_PIPER,
         approxMB = 21,
@@ -46,7 +49,7 @@ object Models {
 
     val SILERO_VAD = ModelSpec(
         id = "silero-vad",
-        displayName = "Silero VAD (endpointing)",
+        displayName = "Speech detection",
         url = "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.onnx",
         kind = ModelKind.VAD,
         approxMB = 1,
@@ -55,7 +58,7 @@ object Models {
 
     val WHISPER_SMALL_EN = ModelSpec(
         id = "whisper-small-en",
-        displayName = "Whisper small.en (ears)",
+        displayName = "Hearing (speech to text)",
         url = "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-whisper-small.en.tar.bz2",
         kind = ModelKind.STT,
         approxMB = 636,
@@ -64,36 +67,42 @@ object Models {
 
     val KWS_ZIPFORMER = ModelSpec(
         id = "kws-zipformer-en",
-        displayName = "Wake word (\"Kate\")",
+        displayName = "Wake word (\u201cMoneypenny\u201d)",
         url = "https://github.com/k2-fsa/sherpa-onnx/releases/download/kws-models/sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01-mobile.tar.bz2",
         kind = ModelKind.KWS,
         approxMB = 16,
         archiveRoot = "sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01-mobile",
     )
 
-    // Spec M1.4 names Llama 3.1 8B / 3.2 3B, but Meta-licensed LiteRT builds are
-    // gated on HF; Qwen3 8B int4 (4.9GB, same budget) and 1.7B are the ungated equivalents.
+    // Spec M1.4 names Llama 8B/3B, but Meta-licensed LiteRT builds are HF-gated and
+    // .litertlm files fail in MediaPipe 0.10.35 ("sentencepiece tokenizer not found").
+    // These are the strongest ungated .task builds that actually load.
     val LLM_PRIMARY = ModelSpec(
-        id = "qwen3-8b-int4",
-        displayName = "Offline brain — Qwen3 8B (4-bit)",
-        url = "https://huggingface.co/litert-community/Qwen3-8B/resolve/main/qwen3_8b_mixed_int4.litertlm",
+        id = "phi4-mini-q8",
+        displayName = "Offline brain (smart, 3.9GB)",
+        url = "https://huggingface.co/litert-community/Phi-4-mini-instruct/resolve/main/Phi-4-mini-instruct_multi-prefill-seq_q8_ekv4096.task",
         kind = ModelKind.LLM,
-        approxMB = 4890,
+        approxMB = 3910,
         isArchive = false,
+        promptStyle = PromptStyle.PHI,
     )
 
     val LLM_FALLBACK = ModelSpec(
-        id = "qwen3-1_7b-int4",
-        displayName = "Offline brain — Qwen3 1.7B (low power)",
-        url = "https://huggingface.co/litert-community/Qwen3-1.7B/resolve/main/Qwen3-1.7B_dynamic_wi4b32_afp32.litertlm",
+        id = "qwen25-0_5b-q8",
+        displayName = "Offline brain (small, 550MB)",
+        url = "https://huggingface.co/litert-community/Qwen2.5-0.5B-Instruct/resolve/main/Qwen2.5-0.5B-Instruct_multi-prefill-seq_q8_ekv1280.task",
         kind = ModelKind.LLM,
-        approxMB = 980,
+        approxMB = 550,
         isArchive = false,
+        promptStyle = PromptStyle.CHATML,
     )
+
+    /** Model ids from earlier builds whose files no longer load — reclaim the gigabytes. */
+    val LEGACY_IDS = listOf("qwen3-8b-int4", "qwen3-1_7b-int4")
 
     val EMBEDDER = ModelSpec(
         id = "use-embedder",
-        displayName = "Memory embeddings (semantic recall)",
+        displayName = "Memory upgrade (smarter recall)",
         url = "https://storage.googleapis.com/mediapipe-models/text_embedder/universal_sentence_encoder/float32/latest/universal_sentence_encoder.tflite",
         kind = ModelKind.EMBEDDING,
         approxMB = 100,
@@ -119,6 +128,13 @@ class ModelManager(context: Context) {
 
     private val root: File = (context.getExternalFilesDir(null) ?: context.filesDir)
         .resolve("models").apply { mkdirs() }
+
+    init {
+        for (id in Models.LEGACY_IDS) {
+            root.listFiles { f -> f.name.startsWith(id) || f.name.contains("litertlm") }
+                ?.forEach { it.deleteRecursively() }
+        }
+    }
 
     private val statuses = Models.ALL.associate { spec ->
         spec.id to MutableStateFlow(if (isReady(spec)) ModelStatus.Ready else ModelStatus.NotDownloaded as ModelStatus)

@@ -53,7 +53,7 @@ fun SettingsScreen(vm: KateViewModel, onBack: () -> Unit, onOpenVoiceLab: () -> 
         Row(verticalAlignment = Alignment.CenterVertically) {
             OutlinedButton(
                 onClick = onBack,
-                shape = RoundedCornerShape(6.dp),
+                shape = RoundedCornerShape(16.dp),
                 border = BorderStroke(1.dp, KateColors.Line),
             ) {
                 Text("BACK", style = MaterialTheme.typography.labelMedium, color = KateColors.TextDim)
@@ -70,7 +70,7 @@ fun SettingsScreen(vm: KateViewModel, onBack: () -> Unit, onOpenVoiceLab: () -> 
         )
         OutlinedButton(
             onClick = onOpenVoiceLab,
-            shape = RoundedCornerShape(6.dp),
+            shape = RoundedCornerShape(16.dp),
             border = BorderStroke(1.dp, KateColors.CyanDim),
             modifier = Modifier.fillMaxWidth(),
         ) {
@@ -101,7 +101,7 @@ fun SettingsScreen(vm: KateViewModel, onBack: () -> Unit, onOpenVoiceLab: () -> 
                     ),
                 )
             },
-            shape = RoundedCornerShape(6.dp),
+            shape = RoundedCornerShape(16.dp),
             border = BorderStroke(1.dp, KateColors.Line),
             modifier = Modifier.fillMaxWidth(),
         ) {
@@ -141,16 +141,17 @@ fun SettingsScreen(vm: KateViewModel, onBack: () -> Unit, onOpenVoiceLab: () -> 
         )
         ModelRow(vm, Models.EMBEDDER)
 
-        SectionLabel("KEYS")
-        KeyField("Groq API key (online brain)", s.groqApiKey, vm::setGroqApiKey)
-        KeyField("Picovoice access key (wake word)", s.picovoiceAccessKey, vm::setPicovoiceAccessKey)
+        SectionLabel("CONNECT")
+        Text("A free Groq key gives her a fast online brain \u2014 console.groq.com", style = MaterialTheme.typography.bodySmall, color = KateColors.TextDim)
+        KeyField("Groq key", s.groqApiKey, vm::setGroqApiKey)
 
-        SectionLabel("PORTAL SYNC")
+        SectionLabel("CLOUD SYNC \u00b7 OPTIONAL")
+        Text("Backs up her memory and runs big jobs in the cloud. Fine to skip.", style = MaterialTheme.typography.bodySmall, color = KateColors.TextDim)
         KeyField("Portal URL", s.portalUrl, vm::setPortalUrl)
         KeyField("Portal token", s.portalToken, vm::setPortalToken)
         OutlinedButton(
             onClick = vm::syncNow,
-            shape = RoundedCornerShape(6.dp),
+            shape = RoundedCornerShape(16.dp),
             border = BorderStroke(1.dp, KateColors.CyanDim),
             modifier = Modifier.fillMaxWidth(),
         ) {
@@ -175,7 +176,7 @@ fun SettingsScreen(vm: KateViewModel, onBack: () -> Unit, onOpenVoiceLab: () -> 
                     crashFile?.delete()
                     crashText = ""
                 },
-                shape = RoundedCornerShape(6.dp),
+                shape = RoundedCornerShape(16.dp),
                 border = BorderStroke(1.dp, KateColors.Line),
             ) {
                 Text("CLEAR", style = MaterialTheme.typography.labelSmall, color = KateColors.TextDim)
@@ -183,7 +184,7 @@ fun SettingsScreen(vm: KateViewModel, onBack: () -> Unit, onOpenVoiceLab: () -> 
         }
 
         Text(
-            "moneypenny 0.5.0",
+            "moneypenny 0.6.0",
             style = MaterialTheme.typography.labelSmall,
             color = KateColors.TextDim,
             modifier = Modifier.padding(top = 8.dp, bottom = 24.dp),
@@ -203,7 +204,7 @@ private fun ChoiceRow(options: List<String>, selected: Int, onSelect: (Int) -> U
             val active = i == selected
             OutlinedButton(
                 onClick = { onSelect(i) },
-                shape = RoundedCornerShape(6.dp),
+                shape = RoundedCornerShape(16.dp),
                 border = BorderStroke(1.dp, if (active) KateColors.Cyan else KateColors.Line),
                 modifier = Modifier.weight(1f),
             ) {

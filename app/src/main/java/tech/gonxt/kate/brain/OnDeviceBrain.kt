@@ -17,7 +17,7 @@ import tech.gonxt.kate.models.ModelManager
 import tech.gonxt.kate.models.ModelSpec
 
 /**
- * Qwen3 ChatML with an empty think block — keeps the instruct model in
+ * ChatML (Qwen) with an empty think block — keeps thinking-capable models in
  * non-thinking mode so spoken replies start immediately.
  */
 fun buildChatMlPrompt(history: List<ChatMessage>, persona: String): String = buildString {
@@ -28,6 +28,22 @@ fun buildChatMlPrompt(history: List<ChatMessage>, persona: String): String = bui
     }
     append("<|im_start|>assistant\n<think>\n\n</think>\n\n")
 }
+
+/** Phi-4 chat template. */
+fun buildPhiPrompt(history: List<ChatMessage>, persona: String): String = buildString {
+    append("<|system|>").append(persona).append("<|end|>")
+    for (m in history.takeLast(12)) {
+        val role = if (m.role == Role.USER) "user" else "assistant"
+        append("<|").append(role).append("|>").append(m.text).append("<|end|>")
+    }
+    append("<|assistant|>")
+}
+
+fun buildPrompt(style: tech.gonxt.kate.models.PromptStyle, history: List<ChatMessage>, persona: String): String =
+    when (style) {
+        tech.gonxt.kate.models.PromptStyle.PHI -> buildPhiPrompt(history, persona)
+        tech.gonxt.kate.models.PromptStyle.CHATML -> buildChatMlPrompt(history, persona)
+    }
 
 /**
  * Offline brain (spec M1.4): LiteRT-LM models via MediaPipe LLM Inference.
@@ -72,7 +88,7 @@ class OnDeviceBrain(
                 .setTopK(40)
                 .build(),
         )
-        session.addQueryChunk(buildChatMlPrompt(history, KATE_PERSONA))
+        session.addQueryChunk(buildPrompt(spec.promptStyle, history, KATE_PERSONA))
         session.generateResponseAsync { partial, done ->
             if (!partial.isNullOrEmpty()) trySend(partial)
             if (done) close()

@@ -51,6 +51,7 @@ fun HomeScreen(
     onOpenSettings: () -> Unit,
     onOpenDriving: () -> Unit,
     onOpenDashboard: () -> Unit = {},
+    onOpenSetup: () -> Unit = {},
 ) {
     val orbState by vm.engine.orbState.collectAsStateWithLifecycle()
     val amplitude by vm.engine.speakingAmplitude.collectAsStateWithLifecycle()
@@ -88,7 +89,7 @@ fun HomeScreen(
             Spacer(Modifier.weight(1f))
             OutlinedButton(
                 onClick = onOpenDashboard,
-                shape = RoundedCornerShape(6.dp),
+                shape = RoundedCornerShape(16.dp),
                 border = androidx.compose.foundation.BorderStroke(1.dp, KateColors.Line),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp),
             ) {
@@ -97,7 +98,7 @@ fun HomeScreen(
             Spacer(Modifier.width(6.dp))
             OutlinedButton(
                 onClick = onOpenDriving,
-                shape = RoundedCornerShape(6.dp),
+                shape = RoundedCornerShape(16.dp),
                 border = androidx.compose.foundation.BorderStroke(1.dp, KateColors.Line),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp),
             ) {
@@ -105,6 +106,23 @@ fun HomeScreen(
             }
             IconButton(onClick = onOpenSettings) {
                 Icon(Icons.Filled.Settings, contentDescription = "Settings", tint = KateColors.TextDim)
+            }
+        }
+
+        if (!vm.setupComplete()) {
+            OutlinedButton(
+                onClick = onOpenSetup,
+                shape = RoundedCornerShape(20.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, KateColors.Cyan),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 12.dp),
+            ) {
+                Text(
+                    "FINISH SETTING HER UP →",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = KateColors.Cyan,
+                )
             }
         }
 
@@ -182,7 +200,7 @@ private fun InputBar(onSend: (String) -> Unit, onTalk: () -> Unit) {
     ) {
         OutlinedButton(
             onClick = onTalk,
-            shape = RoundedCornerShape(6.dp),
+            shape = RoundedCornerShape(16.dp),
             modifier = Modifier.height(56.dp),
             border = androidx.compose.foundation.BorderStroke(1.dp, KateColors.Cyan),
         ) {
@@ -209,7 +227,7 @@ private fun InputBar(onSend: (String) -> Unit, onTalk: () -> Unit) {
             modifier = Modifier
                 .padding(start = 6.dp)
                 .size(48.dp)
-                .border(1.dp, KateColors.Line, RoundedCornerShape(6.dp)),
+                .border(1.dp, KateColors.Line, RoundedCornerShape(16.dp)),
         ) {
             Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send", tint = KateColors.Cyan)
         }

@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <style name="Theme.Kate" parent="android:Theme.Material.NoActionBar">
-        <item name="android:windowBackground">#050A0D</item>
-        <item name="android:statusBarColor">#050A0D</item>
-        <item name="android:navigationBarColor">#050A0D</item>
+        <item name="android:windowBackground">#0D0709</item>
+        <item name="android:statusBarColor">#0D0709</item>
+        <item name="android:navigationBarColor">#0D0709</item>
     </style>
 </resources>

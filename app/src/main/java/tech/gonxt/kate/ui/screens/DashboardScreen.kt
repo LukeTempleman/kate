@@ -51,7 +51,7 @@ fun DashboardScreen(vm: KateViewModel, onBack: () -> Unit) {
         ) {
             OutlinedButton(
                 onClick = onBack,
-                shape = RoundedCornerShape(6.dp),
+                shape = RoundedCornerShape(16.dp),
                 border = BorderStroke(1.dp, KateColors.Line),
             ) {
                 Text("BACK", style = MaterialTheme.typography.labelMedium, color = KateColors.TextDim)
@@ -65,7 +65,7 @@ fun DashboardScreen(vm: KateViewModel, onBack: () -> Unit) {
                 val active = tab == i
                 OutlinedButton(
                     onClick = { tab = i },
-                    shape = RoundedCornerShape(6.dp),
+                    shape = RoundedCornerShape(16.dp),
                     border = BorderStroke(1.dp, if (active) KateColors.Cyan else KateColors.Line),
                     modifier = Modifier.weight(1f),
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(4.dp),
@@ -122,7 +122,7 @@ private fun GraphTab(vm: KateViewModel) {
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
                     .padding(bottom = 16.dp)
-                    .background(KateColors.Surface, RoundedCornerShape(10.dp))
+                    .background(KateColors.Surface, RoundedCornerShape(20.dp))
                     .padding(14.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
@@ -140,7 +140,7 @@ private fun GraphTab(vm: KateViewModel) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(
                         onClick = { vm.pinNode(sel) },
-                        shape = RoundedCornerShape(6.dp),
+                        shape = RoundedCornerShape(16.dp),
                         border = BorderStroke(1.dp, KateColors.CyanDim),
                     ) { Text("PIN", style = MaterialTheme.typography.labelSmall, color = KateColors.Cyan) }
                     OutlinedButton(
@@ -148,13 +148,13 @@ private fun GraphTab(vm: KateViewModel) {
                             vm.deleteNode(sel)
                             selected = null
                         },
-                        shape = RoundedCornerShape(6.dp),
+                        shape = RoundedCornerShape(16.dp),
                         border = BorderStroke(1.dp, KateColors.Line),
                     ) { Text("DELETE", style = MaterialTheme.typography.labelSmall, color = KateColors.Danger) }
                     Spacer(Modifier.weight(1f))
                     OutlinedButton(
                         onClick = { selected = null },
-                        shape = RoundedCornerShape(6.dp),
+                        shape = RoundedCornerShape(16.dp),
                         border = BorderStroke(1.dp, KateColors.Line),
                     ) { Text("CLOSE", style = MaterialTheme.typography.labelSmall, color = KateColors.TextDim) }
                 }
@@ -174,7 +174,7 @@ private fun AnswersTab(vm: KateViewModel) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(KateColors.Surface, RoundedCornerShape(8.dp))
+                    .background(KateColors.Surface, RoundedCornerShape(18.dp))
                     .padding(12.dp),
             ) {
                 Text(t.text, style = MaterialTheme.typography.bodySmall, color = KateColors.Text, maxLines = 4)
@@ -198,7 +198,7 @@ private fun AnswersTab(vm: KateViewModel) {
 private fun RatingButton(glyph: String, active: Boolean, onClick: () -> Unit) {
     OutlinedButton(
         onClick = onClick,
-        shape = RoundedCornerShape(6.dp),
+        shape = RoundedCornerShape(16.dp),
         border = BorderStroke(1.dp, if (active) KateColors.Cyan else KateColors.Line),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 2.dp),
     ) { Text(glyph, style = MaterialTheme.typography.labelMedium) }
@@ -216,7 +216,7 @@ private fun BuildsTab(vm: KateViewModel) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(KateColors.Surface, RoundedCornerShape(8.dp))
+                    .background(KateColors.Surface, RoundedCornerShape(18.dp))
                     .padding(12.dp),
             ) {
                 Text("${s.name} · v${s.version}", style = MaterialTheme.typography.bodyMedium, color = KateColors.Cyan)
@@ -250,7 +250,7 @@ private fun QueueTab(vm: KateViewModel) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(KateColors.Surface, RoundedCornerShape(8.dp))
+                    .background(KateColors.Surface, RoundedCornerShape(18.dp))
                     .padding(12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {

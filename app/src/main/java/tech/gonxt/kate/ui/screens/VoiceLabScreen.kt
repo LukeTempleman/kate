@@ -59,7 +59,7 @@ fun VoiceLabScreen(vm: KateViewModel, onBack: () -> Unit) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             OutlinedButton(
                 onClick = onBack,
-                shape = RoundedCornerShape(6.dp),
+                shape = RoundedCornerShape(16.dp),
                 border = BorderStroke(1.dp, KateColors.Line),
             ) {
                 Text("BACK", style = MaterialTheme.typography.labelMedium, color = KateColors.TextDim)
@@ -94,7 +94,7 @@ fun VoiceLabScreen(vm: KateViewModel, onBack: () -> Unit) {
                 modifier = Modifier
                     .weight(1f)
                     .height(56.dp),
-                shape = RoundedCornerShape(6.dp),
+                shape = RoundedCornerShape(16.dp),
                 border = BorderStroke(1.dp, KateColors.Cyan),
             ) {
                 Text("SPEAK", style = MaterialTheme.typography.labelLarge, color = KateColors.Cyan)
@@ -102,7 +102,7 @@ fun VoiceLabScreen(vm: KateViewModel, onBack: () -> Unit) {
             OutlinedButton(
                 onClick = { vm.engine.bargeIn() },
                 modifier = Modifier.height(56.dp),
-                shape = RoundedCornerShape(6.dp),
+                shape = RoundedCornerShape(16.dp),
                 border = BorderStroke(1.dp, KateColors.Line),
             ) {
                 Text("STOP", style = MaterialTheme.typography.labelLarge, color = KateColors.TextDim)
@@ -129,7 +129,7 @@ fun ModelRow(vm: KateViewModel, spec: ModelSpec) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(KateColors.Surface, RoundedCornerShape(8.dp))
+            .background(KateColors.Surface, RoundedCornerShape(18.dp))
             .padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
@@ -151,14 +151,14 @@ fun ModelRow(vm: KateViewModel, spec: ModelSpec) {
             when (st) {
                 ModelStatus.NotDownloaded, is ModelStatus.Failed -> OutlinedButton(
                     onClick = { vm.downloadModel(spec) },
-                    shape = RoundedCornerShape(6.dp),
+                    shape = RoundedCornerShape(16.dp),
                     border = BorderStroke(1.dp, KateColors.Cyan),
                 ) {
                     Text("GET", style = MaterialTheme.typography.labelMedium, color = KateColors.Cyan)
                 }
                 ModelStatus.Ready -> OutlinedButton(
                     onClick = { vm.deleteModel(spec) },
-                    shape = RoundedCornerShape(6.dp),
+                    shape = RoundedCornerShape(16.dp),
                     border = BorderStroke(1.dp, KateColors.Line),
                 ) {
                     Text("DEL", style = MaterialTheme.typography.labelMedium, color = KateColors.TextDim)

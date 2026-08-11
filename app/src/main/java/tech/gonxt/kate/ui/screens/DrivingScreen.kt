@@ -54,7 +54,7 @@ fun DrivingScreen(vm: KateViewModel, onExit: () -> Unit) {
             OutlinedButton(
                 onClick = onExit,
                 modifier = Modifier.size(width = 120.dp, height = 64.dp),
-                shape = RoundedCornerShape(8.dp),
+                shape = RoundedCornerShape(18.dp),
                 border = BorderStroke(1.dp, KateColors.Line),
             ) {
                 Text("EXIT", style = MaterialTheme.typography.labelLarge, color = KateColors.TextDim)
@@ -103,7 +103,7 @@ fun DrivingScreen(vm: KateViewModel, onExit: () -> Unit) {
                 .fillMaxWidth()
                 .padding(top = 24.dp)
                 .height(96.dp),
-            shape = RoundedCornerShape(12.dp),
+            shape = RoundedCornerShape(22.dp),
             border = BorderStroke(2.dp, KateColors.Cyan),
         ) {
             Text("TALK", fontSize = 28.sp, fontFamily = tech.gonxt.kate.ui.theme.Mono, color = KateColors.Cyan)

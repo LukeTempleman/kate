@@ -12,6 +12,7 @@ import tech.gonxt.kate.ui.screens.DashboardScreen
 import tech.gonxt.kate.ui.screens.DrivingScreen
 import tech.gonxt.kate.ui.screens.HomeScreen
 import tech.gonxt.kate.ui.screens.SettingsScreen
+import tech.gonxt.kate.ui.screens.SetupScreen
 import tech.gonxt.kate.ui.screens.VoiceLabScreen
 
 object Routes {
@@ -20,6 +21,7 @@ object Routes {
     const val DRIVING = "driving"
     const val VOICE_LAB = "voice_lab"
     const val DASHBOARD = "dashboard"
+    const val SETUP = "setup"
 }
 
 @Composable
@@ -41,10 +43,14 @@ fun KateApp(vm: KateViewModel) {
                 onOpenSettings = { nav.navigate(Routes.SETTINGS) },
                 onOpenDriving = { vm.setDrivingMode(true) },
                 onOpenDashboard = { nav.navigate(Routes.DASHBOARD) },
+                onOpenSetup = { nav.navigate(Routes.SETUP) },
             )
         }
         composable(Routes.DASHBOARD) {
             DashboardScreen(vm = vm, onBack = { nav.popBackStack() })
+        }
+        composable(Routes.SETUP) {
+            SetupScreen(vm = vm, onDone = { nav.popBackStack() })
         }
         composable(Routes.SETTINGS) {
             SettingsScreen(

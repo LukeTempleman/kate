@@ -96,6 +96,15 @@ class KateViewModel(app: Application) : AndroidViewModel(app) {
     fun deleteModel(spec: ModelSpec) = modelManager.delete(spec)
     fun speakDirect(text: String) = engine.speakDirect(text)
 
+    fun anyOfflineBrainReady(): Boolean =
+        modelManager.isReady(tech.gonxt.kate.models.Models.LLM_PRIMARY) ||
+            modelManager.isReady(tech.gonxt.kate.models.Models.LLM_FALLBACK)
+
+    /** Setup is "done enough" once she can speak and has any brain. */
+    fun setupComplete(): Boolean =
+        modelManager.isReady(tech.gonxt.kate.models.Models.KOKORO) &&
+            (settings.value.groqApiKey.isNotBlank() || anyOfflineBrainReady())
+
     fun setPortalUrl(url: String) = viewModelScope.launch { settingsRepo.setPortalUrl(url) }
     fun setPortalToken(t: String) = viewModelScope.launch { settingsRepo.setPortalToken(t) }
     fun syncNow() = SyncEngine.syncNow(getApplication())
