@@ -19,7 +19,6 @@ import tech.gonxt.kate.memory.MediaPipeEmbedder
 import tech.gonxt.kate.memory.MemoryRecall
 import tech.gonxt.kate.memory.MemoryStore
 import tech.gonxt.kate.memory.db.KateDb
-import kotlinx.coroutines.runBlocking
 import tech.gonxt.kate.models.ModelStatus
 import tech.gonxt.kate.models.Models
 import tech.gonxt.kate.skills.SkillManager
@@ -53,8 +52,8 @@ class KateApplication : Application() {
     val brainRouter by lazy {
         BrainRouter(
             online = GroqBrain(this) { settings.value.groqApiKey },
-            devicePrimary = OnDeviceBrain(this, modelManager, Models.LLM_PRIMARY, "qwen3-8b"),
-            deviceFallback = OnDeviceBrain(this, modelManager, Models.LLM_FALLBACK, "qwen3-1.7b"),
+            devicePrimary = OnDeviceBrain(this, modelManager, Models.LLM_PRIMARY, "phi4-mini"),
+            deviceFallback = OnDeviceBrain(this, modelManager, Models.LLM_FALLBACK, "qwen2.5"),
             mode = { settings.value.brainMode },
             constrained = ::isConstrained,
         )
@@ -62,8 +61,15 @@ class KateApplication : Application() {
 
     val db by lazy { KateDb.build(this) }
 
-    // Iteration 5: sync plumbing.
-    val deviceId: String by lazy { runBlocking { settingsRepository.deviceId() } }
+    // Iteration 5: sync plumbing. Plain file, not DataStore — this is read during
+    // startup on the main thread and must never block behind DataStore's queue.
+    val deviceId: String by lazy {
+        val f = java.io.File(filesDir, "device_id.txt")
+        if (f.exists()) f.readText().trim().ifEmpty { null } ?: newDeviceId(f) else newDeviceId(f)
+    }
+
+    private fun newDeviceId(f: java.io.File): String =
+        ("ph" + java.util.UUID.randomUUID().toString().take(8)).also { f.writeText(it) }
     val hlc by lazy { Hlc(deviceId) }
     val syncRecorder: SyncRecorder? by lazy { SyncRecorder(db, hlc, deviceId) }
     val syncEngine by lazy { SyncEngine(this, this) }

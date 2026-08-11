@@ -163,6 +163,7 @@ class ModelManager(context: Context) {
             doneMarker(spec).writeText(spec.url)
             status.value = ModelStatus.Ready
         } catch (e: Exception) {
+            android.util.Log.e("KateModels", "download failed: ${spec.id}", e)
             status.value = ModelStatus.Failed(e.message ?: e.javaClass.simpleName)
         }
     }

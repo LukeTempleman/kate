@@ -175,7 +175,7 @@ private fun SetupCard(
             else -> {
                 if (failed != null) {
                     Text(
-                        "That didn't finish — check your connection and try again.",
+                        "That didn't finish (${failed.reason.take(60)}) — tap again to retry; finished parts are kept.",
                         style = MaterialTheme.typography.bodySmall,
                         color = KateColors.Danger,
                     )
