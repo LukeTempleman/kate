@@ -86,6 +86,9 @@ class ConversationEngine(
             return
         }
         latency.mark("stt_final")
+        // A stray extra VAD Final must not run two turns at once.
+        turnJob?.cancel()
+        tts.stop()
         turnJob = scope.launch { runTurn(text, alreadyMarked = true) }
     }
 

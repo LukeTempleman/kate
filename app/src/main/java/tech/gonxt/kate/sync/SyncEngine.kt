@@ -73,25 +73,29 @@ class SyncEngine(
             conn.setRequestProperty("Authorization", "Bearer $token")
             conn.setRequestProperty("Content-Type", "application/json")
             conn.outputStream.use { it.write(body.toString().toByteArray()) }
-            if (conn.responseCode != 200) return@withContext false
+            check(conn.responseCode == 200) { "sync http ${conn.responseCode}" } // throw → WorkManager retries
 
             val reply = json.parseToJsonElement(conn.inputStream.bufferedReader().readText()).jsonObject
             app.db.syncLog().markApplied(pending.map { it.id })
 
             // Portal-origin events down (consolidated memories, spec §2.5).
+            // Per-event guard: one bad event must not block seq progress (redelivery = duplicates).
             for (ev in reply["events"]?.jsonArray.orEmpty()) {
-                val o = ev.jsonObject
-                if (o["entity"]?.jsonPrimitive?.content != "memory") continue
-                if (o["op"]?.jsonPrimitive?.content != "upsert") continue
-                val p = o["payload"]?.jsonObject ?: continue
-                o["hlc"]?.jsonPrimitive?.content?.let { app.hlc.update(it) }
-                app.db.memories().insert(
-                    MemoryEntity(
-                        type = p["type"]?.jsonPrimitive?.content ?: "topic-summary",
-                        content = p["content"]?.jsonPrimitive?.content ?: continue,
-                        createdAt = p["created_at"]?.jsonPrimitive?.long ?: System.currentTimeMillis(),
-                    ),
-                )
+                runCatching {
+                    val o = ev.jsonObject
+                    if (o["entity"]?.jsonPrimitive?.content != "memory") return@runCatching
+                    if (o["op"]?.jsonPrimitive?.content != "upsert") return@runCatching
+                    val p = o["payload"]?.jsonObject ?: return@runCatching
+                    val content = p["content"]?.jsonPrimitive?.content ?: return@runCatching
+                    o["hlc"]?.jsonPrimitive?.content?.let { app.hlc.update(it) }
+                    app.db.memories().insert(
+                        MemoryEntity(
+                            type = p["type"]?.jsonPrimitive?.content ?: "topic-summary",
+                            content = content,
+                            createdAt = p["created_at"]?.jsonPrimitive?.long ?: System.currentTimeMillis(),
+                        ),
+                    )
+                }
             }
             reply["latest_seq"]?.jsonPrimitive?.long?.let { app.settingsRepository.setPortalSeq(it) }
             true
@@ -126,7 +130,8 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
     override suspend fun doWork(): Result {
         val app = applicationContext as KateApplication
         return try {
-            if (app.syncEngine.syncOnce()) Result.success() else Result.success()
+            app.syncEngine.syncOnce() // false = portal not configured; both are terminal states
+            Result.success()
         } catch (e: Exception) {
             if (runAttemptCount < 3) Result.retry() else Result.failure()
         }
