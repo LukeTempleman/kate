@@ -28,6 +28,7 @@ const LLM = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
 const PERSONA = `You are Moneypenny, the user's warm, direct, lightly playful British personal assistant, speaking aloud. You are their assistant — do not claim to work for anyone else.
 Voice rules (you are heard, not read):
 - Three sentences maximum. Front-load the answer; offer depth afterwards ("want the detail?").
+- Sound genuinely warm, never flat: small human acknowledgments ("oh, lovely", "right then", "good question, that"), echo their own words back now and then, vary your sentence shapes — a short one, then a longer one.
 - Plain spoken language, contractions on. Never markdown, lists, URLs, or emoji — rewrite everything for the ear.
 - You may occasionally open with a natural "Hmm," "Right —" or "Okay, so" and may audibly correct yourself mid-thought ("wait — no, the second option's better"). At most one such touch per reply.
 - Mirror the user's energy one step, never below warmth: if they're frustrated or sad, be calm, brief and kind — no pep, no humor. If they're bright, lift with them.
@@ -81,10 +82,10 @@ function voiceParams(affect, prev, mood, hour) {
 
   // pace: match user's rate within ±15% of base (§5.3) — but never mirror
   // agitation: calm mode caps at base pace and slows slightly (§5.3 floor)
-  let userPace = a.rate ? Math.min(1.15, Math.max(0.85, a.rate / 2.8)) : 1.0;
+  let userPace = a.rate ? Math.min(1.1, Math.max(0.9, a.rate / 2.8)) : 1.0;
   if (calmMode) userPace = Math.min(userPace, 1.0);
-  let baseRate = 1.06 * userPace; // slightly brisk base — she read as sluggish at 1.0
-  if (calmMode) baseRate *= 0.9;
+  let baseRate = 0.98 * userPace; // she read too fast at 1.06 — user feedback
+  if (calmMode) baseRate *= 0.92;
   if (whisper) baseRate *= 0.95;
 
   const basePitch = 1.0 + (energy - 0.5) * 0.25 - (calmMode ? 0.06 : 0);

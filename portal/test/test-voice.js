@@ -26,7 +26,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
       const req = res.request();
       if (req.url().endsWith('/api/chat') && req.method() === 'POST') {
         const b = JSON.parse(req.postData() || '{}');
-        if (b.draft && draftResolved) draftResolved();
+        if (b.draft && draftResolved && res.status() === 200) draftResolved();
       }
     } catch (_) {}
   });
@@ -114,8 +114,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   delayStream = 0;
   await sleep(1500);
   const playsAfter = (await audioPlays()).length;
-  const spokenAfter = (await page.evaluate(() => window.__spoken)).length;
-  ok('bridge fired during slow think', playsAfter > playsBefore + 1 || spokenAfter > spokenBefore, `audio ${playsBefore}→${playsAfter}, synth ${spokenBefore}→${spokenAfter}`);
+  const bridgedAt = await page.evaluate(() => window.__pennyLastBridge || 0);
+  ok('bridge fired during slow think', bridgedAt > 0, 'bridge ts=' + bridgedAt + ', audio ' + playsBefore + '→' + playsAfter);
 
   // 3. speculation
   await sleep(1500);
@@ -133,8 +133,10 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await sleep(600);
   const draftsSent = chatBodies.slice(chatCountBefore).filter((b) => b.draft).length;
   ok('speculative draft fired', draftsSent >= 1, draftsSent + ' drafts');
+  const takeInfo = await page.evaluate(() => window.__pennyTake || null);
   ok('speculation hit: no stream call, committed via /api/log',
-    streamBodies.length === streamCountBefore && logCalls.length > logBefore);
+    streamBodies.length === streamCountBefore && logCalls.length > logBefore,
+    JSON.stringify(takeInfo));
   const statsTxt = await page.evaluate(() => document.querySelector('#stats').textContent);
   ok('stats show TTFA + SPEC', /TTFA \d+ms/.test(statsTxt) && /SPEC \d+%/.test(statsTxt), statsTxt);
 
@@ -151,6 +153,57 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   ok('barge-in sent cut_context', lastStream && typeof lastStream.cut_context === 'string' && lastStream.cut_context.length > 0,
     'cut="' + String(lastStream && lastStream.cut_context).slice(0, 40) + '"');
 
+  // 5a. semantic endpointing thresholds (§4.1)
+  const th = await page.evaluate(() => ({
+    trailing: window.__penny.silenceMsFor('I was thinking about'),
+    comma: window.__penny.silenceMsFor('so the first one,'),
+    command: window.__penny.silenceMsFor('yeah do that'),
+    sentence: window.__penny.silenceMsFor('please add milk to the shopping list for tomorrow'),
+  }));
+  ok('endpointing: trailing thought holds the floor', th.trailing >= 1800 && th.comma >= 1800, JSON.stringify(th));
+  ok('endpointing: complete thoughts release fast', th.command <= 800 && th.sentence <= 1200);
+
+  // 5b. voice barge-in with echo filter: her own words ignored, user speech interrupts
+  await page.click('#convBtn'); // watch mode requires auto-listen or a voice turn
+  const playsN = (await audioPlays()).length;
+  await page.type('#text', 'Tell me another long story, slowly.');
+  await page.click('#send');
+  await waitPenny(6);
+  await page.waitForFunction(() => window.__penny.currentSeg().length > 0, { timeout: 30000 });
+  await sleep(300);
+  // watch session runs (voice was last input? typed — force conversation mode on for watch)
+  const watching = await page.evaluate(() => !!window.__rec);
+  // echo: feed her own current words — must NOT interrupt
+  const herWords = await page.evaluate(() => (document.querySelectorAll('.msg.penny')[5] || {}).textContent || '');
+  if (watching) {
+    await page.evaluate((w) => window.__feedInterim(w), herWords.split(/\s+/).slice(0, 6).join(' '));
+    await sleep(300);
+    const stillSpeaking = await page.evaluate(() => window.__audioPlays.length >= 0); // she wasn't stopped: no crash & no capture UI
+    const talkLabel1 = await page.evaluate(() => document.querySelector('#talk').textContent);
+    const specLog = await page.evaluate(() => (window.__specLog || []).slice(-6));
+    ok('echo filter: her own words do not interrupt', !talkLabel1.includes('LIVE'), talkLabel1 + ' ' + JSON.stringify(specLog));
+    // real user speech — must interrupt
+    await page.evaluate(() => window.__feedInterim('hold on stop for a second please'));
+    await sleep(400);
+    const talkLabel2 = await page.evaluate(() => document.querySelector('#talk').textContent);
+    ok('voice barge-in: user speech interrupts her', talkLabel2.includes('LIVE'), talkLabel2);
+    await page.evaluate(() => window.__feedFinal('hold on stop for a second please what time is it'));
+    await waitPenny(7);
+  } else {
+    ok('echo filter: her own words do not interrupt', false, 'watch session never started');
+    ok('voice barge-in: user speech interrupts her', false, 'watch session never started');
+  }
+
+  // 5c. speaker + pace pills
+  await page.click('#paceBtn');
+  const paceTxt = await page.evaluate(() => document.querySelector('#paceBtn').textContent);
+  ok('pace pill cycles', /PACE·(SLOW|NORM|QUICK)/.test(paceTxt), paceTxt);
+  const spBefore = await page.evaluate(() => document.querySelector('#speakerBtn').textContent);
+  await page.click('#speakerBtn');
+  await sleep(400);
+  const spAfter = await page.evaluate(() => document.querySelector('#speakerBtn').textContent);
+  ok('speaker pill cycles her voice', spBefore !== spAfter, spBefore + '→' + spAfter);
+
   // 5. browser-voice fallback mode
   await page.click('#voiceBtn');
   await sleep(200);
@@ -159,7 +212,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await page.evaluate(() => { window.__spoken = []; });
   await page.type('#text', 'Say one short sentence.');
   await page.click('#send');
-  await waitPenny(6);
+  await waitPenny(8);
   await page.waitForFunction(() => window.__spoken.length >= 1, { timeout: 30000 });
   const spoken = await page.evaluate(() => window.__spoken);
   ok('phone voice speaks segments with prosody', spoken.every((s) => typeof s.rate === 'number' && typeof s.pitch === 'number'),

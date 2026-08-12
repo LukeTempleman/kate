@@ -11,13 +11,13 @@
   * { box-sizing:border-box; margin:0; -webkit-tap-highlight-color:transparent; }
   body { background:var(--base); color:var(--text); font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
          height:100dvh; display:flex; flex-direction:column; overflow:hidden; }
-  header { display:flex; align-items:center; gap:8px; padding:14px 16px; flex-wrap:wrap; }
-  h1 { color:var(--red); font-weight:500; letter-spacing:.15em; font-size:1.05rem; }
-  .pill { font-size:.6rem; letter-spacing:.12em; color:var(--dim); border:1px solid var(--line);
-          border-radius:999px; padding:4px 10px; cursor:pointer; user-select:none; }
+  header { display:flex; align-items:center; gap:6px; padding:12px 14px; flex-wrap:wrap; }
+  h1 { color:var(--red); font-weight:500; letter-spacing:.12em; font-size:1rem; margin-right:4px; }
+  .pill { font-size:.58rem; letter-spacing:.1em; color:var(--dim); border:1px solid var(--line);
+          border-radius:999px; padding:4px 9px; cursor:pointer; user-select:none; }
   .pill.on { color:var(--red); border-color:var(--red); }
-  #orbWrap { display:flex; justify-content:center; padding:6px 0 0; }
-  canvas#orb { width:190px; height:190px; }
+  #orbWrap { display:flex; justify-content:center; padding:4px 0 0; }
+  canvas#orb { width:180px; height:180px; }
   #status { text-align:center; color:var(--dim); font-size:.8rem; min-height:1.4em; padding:4px 16px; }
   #stats { text-align:center; color:var(--red-dim); font-size:.62rem; letter-spacing:.1em; min-height:1.2em; }
   #log { flex:1; overflow-y:auto; padding:8px 20px 12px; }
@@ -43,7 +43,9 @@
   <h1>MONEYPENNY</h1>
   <span class="pill" id="convBtn">AUTO-LISTEN</span>
   <span class="pill on" id="voiceBtn">VOICE·HER</span>
+  <span class="pill" id="speakerBtn">♀ ATHENA</span>
   <span class="pill" id="pickBtn" style="display:none">▸ PHONE VOICE</span>
+  <span class="pill" id="paceBtn">PACE·NORM</span>
   <span class="pill" style="margin-left:auto"><a href="/dashboard" style="color:inherit;text-decoration:none">DASH</a></span>
 </header>
 <div id="orbWrap"><canvas id="orb" width="380" height="380"></canvas></div>
@@ -158,7 +160,7 @@ const sidecar = {
         for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
         this.frames.push(Math.sqrt(sum / buf.length));
       }, 60);
-    } catch (_) { /* no second mic stream — lexical affect only */ }
+    } catch (_) {}
   },
   stop(finalText) {
     clearInterval(this.timer);
@@ -204,30 +206,43 @@ function updateMood(affect) {
   return mood;
 }
 
-// ---- voice engines: HER (server Aura, British female) or PHONE (browser) ----
+// ---- voice settings: her speaker, phone voice, pace ----
+const SPEAKERS = ['athena', 'luna', 'stella', 'hera', 'asteria'];
+let speaker = localStorage.getItem('penny_speaker') || 'athena';
 let voiceMode = localStorage.getItem('penny_voice_mode') || 'cloud';
+const PACES = [['SLOW', 0.9], ['NORM', 1.0], ['QUICK', 1.12]];
+let paceIdx = +(localStorage.getItem('penny_pace') || 1);
+const paceMult = () => PACES[paceIdx][1];
+
 let browserVoice = null, browserVoiceName = localStorage.getItem('penny_browser_voice') || null;
-function enVoices() {
-  return speechSynthesis.getVoices().filter((v) => /^en/i.test(v.lang));
-}
+function enVoices() { return speechSynthesis.getVoices().filter((v) => /^en/i.test(v.lang)); }
 function pickVoice() {
   const vs = enVoices();
   browserVoice = (browserVoiceName && vs.find((v) => v.name === browserVoiceName))
     || vs.find((v) => /en[-_]GB/i.test(v.lang) && /female|Kate|Serena|Sonia|Libby/i.test(v.name))
-    || vs.find((v) => /en[-_]GB/i.test(v.lang))
-    || vs[0] || null;
+    || vs.find((v) => /en[-_]GB/i.test(v.lang)) || vs[0] || null;
 }
 speechSynthesis.onvoiceschanged = pickVoice; pickVoice();
-function refreshVoicePills() {
+
+function refreshPills() {
   $('#voiceBtn').textContent = voiceMode === 'cloud' ? 'VOICE·HER' : 'VOICE·PHONE';
   $('#voiceBtn').classList.toggle('on', voiceMode === 'cloud');
+  $('#speakerBtn').style.display = voiceMode === 'cloud' ? '' : 'none';
+  $('#speakerBtn').textContent = '♀ ' + speaker.toUpperCase();
   $('#pickBtn').style.display = voiceMode === 'browser' ? '' : 'none';
-  if (voiceMode === 'browser' && browserVoice) $('#pickBtn').textContent = '▸ ' + browserVoice.name.slice(0, 22).toUpperCase();
+  if (voiceMode === 'browser' && browserVoice) $('#pickBtn').textContent = '▸ ' + browserVoice.name.slice(0, 20).toUpperCase();
+  $('#paceBtn').textContent = 'PACE·' + PACES[paceIdx][0];
 }
 $('#voiceBtn').onclick = () => {
   voiceMode = voiceMode === 'cloud' ? 'browser' : 'cloud';
   localStorage.setItem('penny_voice_mode', voiceMode);
-  refreshVoicePills();
+  refreshPills();
+};
+$('#speakerBtn').onclick = async () => {
+  speaker = SPEAKERS[(SPEAKERS.indexOf(speaker) + 1) % SPEAKERS.length];
+  localStorage.setItem('penny_speaker', speaker);
+  refreshPills();
+  try { new Audio(await fetchTtsBlob("Hello — this is my voice now. Shall I keep it?")).play(); } catch (_) {}
 };
 $('#pickBtn').onclick = () => {
   const vs = enVoices();
@@ -236,24 +251,29 @@ $('#pickBtn').onclick = () => {
   browserVoice = vs[(i + 1) % vs.length];
   browserVoiceName = browserVoice.name;
   localStorage.setItem('penny_browser_voice', browserVoiceName);
-  refreshVoicePills();
+  refreshPills();
   const u = new SpeechSynthesisUtterance('Hello, this is how I sound.');
-  u.voice = browserVoice; u.pitch = 1; u.rate = 1.05;
+  u.voice = browserVoice; u.pitch = 1; u.rate = 1.02;
   speechSynthesis.cancel(); speechSynthesis.speak(u);
 };
-refreshVoicePills();
+$('#paceBtn').onclick = () => {
+  paceIdx = (paceIdx + 1) % PACES.length;
+  localStorage.setItem('penny_pace', String(paceIdx));
+  refreshPills();
+};
+refreshPills();
 
 async function fetchTtsBlob(text, signal) {
   const r = await fetch('/api/tts', {
     method: 'POST',
     headers: { 'content-type': 'application/json', authorization: 'Bearer ' + token() },
-    body: JSON.stringify({ text }), signal,
+    body: JSON.stringify({ text, speaker }), signal,
   });
   if (!r.ok) throw new Error('tts ' + r.status);
   return URL.createObjectURL(await r.blob());
 }
 
-// ---- unified segment player: streams in, speaks in order, tracks cut point ----
+// ---- unified segment player ----
 const player = {
   q: [], playing: false, cancelled: false, inputDone: false,
   spokenSoFar: '', currentSeg: '', progress: 0,
@@ -266,7 +286,7 @@ const player = {
   },
   enqueue(seg) {
     if (this.cancelled) return;
-    if (voiceMode === 'cloud') seg.__audio = fetchTtsBlob(seg.text).catch(() => null); // prefetch in parallel
+    if (voiceMode === 'cloud') seg.__audio = fetchTtsBlob(seg.text).catch(() => null);
     this.q.push(seg);
     if (!this.playing) { this.playing = true; this.loop(); }
   },
@@ -288,7 +308,7 @@ const player = {
       try {
         if (voiceMode === 'cloud') await this.playCloud(seg);
         else await this.playBrowser(seg);
-      } catch (_) { /* segment failed — keep going */ }
+      } catch (_) {}
       if (this.cancelled) return;
       this.spokenSoFar += seg.text + ' ';
       if (seg.pausePost) await new Promise((r) => setTimeout(r, seg.pausePost));
@@ -296,12 +316,15 @@ const player = {
   },
   async playCloud(seg) {
     const url = await seg.__audio;
-    if (!url) return this.playBrowser(seg); // tts failed → phone voice for this clause
+    if (!url) return this.playBrowser(seg);
     if (this.cancelled) return;
     await new Promise((resolve) => {
       const a = new Audio(url);
       this.audioEl = a;
-      a.playbackRate = Math.min(1.3, Math.max(0.8, seg.rate || 1));
+      // preservesPitch off: the small per-clause rate differences become gentle
+      // pitch movement too — kills the monotone without sounding warped.
+      try { a.preservesPitch = false; } catch (_) {}
+      a.playbackRate = Math.min(1.3, Math.max(0.75, (seg.rate || 1) * paceMult()));
       a.volume = seg.volume ?? 1;
       a.onplaying = () => { if (this.first) { this.first = false; this.onFirstAudio && this.onFirstAudio(); } };
       a.ontimeupdate = () => { if (a.duration) this.progress = a.currentTime / a.duration; };
@@ -315,7 +338,7 @@ const player = {
     return new Promise((resolve) => {
       const u = new SpeechSynthesisUtterance(seg.text);
       if (browserVoice) u.voice = browserVoice;
-      u.rate = seg.rate || 1; u.pitch = seg.pitch || 1; u.volume = seg.volume ?? 1;
+      u.rate = (seg.rate || 1) * paceMult(); u.pitch = seg.pitch || 1; u.volume = seg.volume ?? 1;
       u.onstart = () => { if (this.first) { this.first = false; this.onFirstAudio && this.onFirstAudio(); } };
       u.onboundary = (e) => { this.progress = seg.text.length ? (e.charIndex || 0) / seg.text.length : 0; };
       u.onend = resolve; u.onerror = resolve;
@@ -331,10 +354,14 @@ const player = {
     const idx = Math.floor(this.currentSeg.length * Math.min(1, this.progress + 0.15));
     return (this.spokenSoFar + this.currentSeg.slice(0, idx)).trim().slice(-100);
   },
+  /** words she has said recently — for the barge-in echo filter */
+  recentWords() {
+    return (this.spokenSoFar + ' ' + this.currentSeg).toLowerCase().match(/[a-z']+/g) || [];
+  },
   isSpeaking() { return this.playing && !this.cancelled; },
 };
 
-// ---- filler bridges (§3.2): pre-synthesized so they play instantly ----
+// ---- filler bridges (§3.2) ----
 const BRIDGES = {
   low: ['Mm, let me think.', 'Okay — one moment.'],
   mid: ['Hmm —', 'Okay, so…', 'Let me look…'],
@@ -348,6 +375,7 @@ function warmBridges() {
   }
 }
 function speakBridge() {
+  window.__pennyLastBridge = Date.now();
   const v = (loadMood() || {}).valence ?? 0.6;
   const list = v < 0.4 ? BRIDGES.low : v > 0.7 ? BRIDGES.high : BRIDGES.mid;
   const t = list[Math.floor(Math.random() * list.length)];
@@ -370,29 +398,50 @@ function jaccard(a, b) {
   for (const w of A) if (B.has(w)) inter++;
   return inter / (A.size + B.size - inter);
 }
+window.__specLog = [];
+const slog = (m) => window.__specLog.push(Date.now() % 100000 + ' ' + m);
 const spec = {
-  draft: null, basis: '', ctrl: null, timer: null,
+  draft: null, basis: '', ctrl: null, timer: null, epoch: 0, inflight: null,
   arm(getPartial, buildBody) {
+    this.disarm();
     this.timer = setInterval(async () => {
       const partial = getPartial().trim();
       if (partial.split(/\s+/).length < 5 || partial === this.basis) return;
       this.basis = partial;
-      this.ctrl && this.ctrl.abort();
+      this.ctrl && this.ctrl.abort(); // replace an older draft still in flight
       this.ctrl = new AbortController();
-      try {
+      const ep = this.epoch;
+      slog('draft send ep=' + ep + ' basis="' + partial + '"');
+      const p = (async () => {
         const res = await api('/api/chat', { ...buildBody(partial), draft: true }, this.ctrl.signal);
-        // pre-synthesize the first clause too: a hit then starts in ~0ms
         if (voiceMode === 'cloud' && res.segments && res.segments[0]) {
           res.segments[0].__audio = fetchTtsBlob(res.segments[0].text).catch(() => null);
         }
-        this.draft = { basis: partial, res };
-      } catch (_) {}
+        slog('draft landed ep=' + ep + '/' + this.epoch + ' reply=' + (res.reply || '').slice(0, 20));
+        if (this.epoch === ep) this.draft = { basis: partial, res };
+      })();
+      this.inflight = { basis: partial, promise: p.catch((e) => { slog('draft ERROR ' + e.message); if (this.epoch === ep) this.basis = ''; }) };
+      await this.inflight.promise;
     }, 700);
   },
-  disarm() { clearInterval(this.timer); this.timer = null; if (this.ctrl) this.ctrl.abort(); },
-  take(finalText) {
-    const d = this.draft; this.draft = null; this.basis = '';
-    if (d && jaccard(d.basis, finalText) >= 0.92) return d.res;
+  // NOTE: never abort here — the turn may be about to use the in-flight draft.
+  disarm() { clearInterval(this.timer); this.timer = null; },
+  async take(finalText) {
+    slog('take called draft=' + !!this.draft + ' inflight=' + !!this.inflight);
+    // draft still in flight but for (almost) this exact sentence → worth a short wait
+    // A matching draft mid-flight WILL finish sooner than a fresh identical
+    // request — wait for it rather than racing yourself (spec §3.1).
+    if (!this.draft && this.inflight && jaccard(this.inflight.basis, finalText) >= 0.92) {
+      await Promise.race([this.inflight.promise, new Promise((r) => setTimeout(r, 8000))]);
+    }
+    const d = this.draft;
+    this.draft = null; this.basis = ''; this.inflight = null; this.epoch++;
+    const matched = d && jaccard(d.basis, finalText) >= 0.92;
+    if (!matched && this.ctrl) this.ctrl.abort();
+    this.ctrl = null;
+    const sim = d ? jaccard(d.basis, finalText) : -1;
+    window.__pennyTake = { basis: d ? d.basis : null, final: finalText, sim };
+    if (d && sim >= 0.92) return d.res;
     return null;
   },
 };
@@ -407,39 +456,139 @@ function showStats(tone) {
   statsEl.textContent = bits.join(' · ');
 }
 
-// ---- speech in ----
-const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-let rec = null, listening = false, interimText = '';
-if (!SR) { talkBtn.disabled = true; statusEl.textContent = 'voice input needs Chrome — typing still works'; }
-function startListening() {
-  if (!SR || listening) return;
-  if (player.isSpeaking()) { lastCut = player.cutPosition(); }
-  player.stop();
-  warmBridges();
-  rec = new SR();
-  rec.lang = 'en-GB'; rec.interimResults = true; rec.continuous = false;
-  listening = true; interimText = '';
-  talkBtn.classList.add('listening'); talkBtn.textContent = '● LIVE';
-  setMode('listening', 'listening…');
-  sidecar.start();
-  spec.arm(() => interimText, (partial) => chatBody(partial));
-  let finalText = '';
-  rec.onresult = (e) => {
-    let interim = '';
-    for (const res of e.results) (res.isFinal ? (finalText += res[0].transcript) : (interim += res[0].transcript));
-    interimText = (finalText + ' ' + interim).trim();
-    statusEl.textContent = '“' + interimText + '”';
-  };
-  rec.onerror = (e) => { spec.disarm(); stopUi(); setMode('idle', e.error === 'not-allowed' ? 'allow microphone access, then retry' : ' '); };
-  rec.onend = () => {
-    spec.disarm(); stopUi();
-    const said = finalText.trim() || interimText.trim();
-    if (said) { turnEndAt = Date.now(); handleUtterance(said, sidecar.stop(said)); }
-    else { sidecar.stop(''); setMode('idle', ' '); }
-  };
-  rec.start();
+// ============ TURN-TAKING (§4) ============
+
+// Semantic endpointing (§4.1): how long to wait after you go quiet depends on
+// whether the sentence sounds finished. Trailing "and…" holds the floor.
+const INCOMPLETE_ENDINGS = new Set([
+  'and','but','or','so','because','then','also','like','um','uh','erm','plus','with','without',
+  'the','a','an','to','of','for','from','in','on','at','by','about','my','your','his','her','their','our',
+  'is','are','was','were','be','being','i','if','while','which','who','how','what','where','why',
+  'can','could','should','would','will','might','may','do','does','did','have','has','had','very','really','quite','just',
+]);
+function silenceMsFor(text) {
+  const t = (text || '').trim().toLowerCase();
+  if (!t) return 4000; // nothing said yet — give them time to start
+  if (/[,:;—–-]$/.test(t)) return 2000;
+  const last = (t.match(/[a-z']+$/) || [''])[0];
+  if (INCOMPLETE_ENDINGS.has(last)) return 2000;
+  const words = t.split(/\s+/).length;
+  if (words <= 4) return 700;   // short command — release fast
+  return 1000;                  // complete-sounding thought
 }
-function stopUi() { listening = false; talkBtn.classList.remove('listening'); talkBtn.textContent = 'TALK'; }
+window.__penny = { silenceMsFor, currentSeg: () => player.currentSeg }; // test hooks
+
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+if (!SR) { talkBtn.disabled = true; statusEl.textContent = 'voice input needs Chrome — typing still works'; }
+
+// One listening session, two modes:
+//  capture — full listening UI, our own adaptive endpointing
+//  watch   — running quietly while SHE speaks; real user speech = barge-in (§4.2)
+let session = null;
+let lastInputWasVoice = false;
+
+function stopSession() {
+  if (!session) return;
+  const s = session; session = null;
+  clearTimeout(s.silenceTimer); clearTimeout(s.capTimer);
+  s.dead = true;
+  try { s.rec.onresult = s.rec.onend = s.rec.onerror = null; s.rec.abort(); } catch (_) {}
+  stopUi();
+}
+
+function startSession(kind) {
+  if (!SR || (session && !session.dead)) return;
+  stopSession();
+  slog('session start ' + kind);
+  const s = { kind, rec: new SR(), text: '', dead: false, silenceTimer: null, capTimer: null, committed: false };
+  session = s;
+  s.rec.lang = 'en-GB'; s.rec.interimResults = true; s.rec.continuous = true;
+
+  const commit = () => {
+    if (s.committed || s.dead) return;
+    s.committed = true;
+    try { s.rec.stop(); } catch (_) {}
+  };
+  const resetSilence = () => {
+    clearTimeout(s.silenceTimer);
+    s.silenceTimer = setTimeout(commit, silenceMsFor(s.text));
+  };
+
+  const promoteToCapture = () => {
+    slog('PROMOTE to capture');
+    if (s.kind !== 'watch') return;
+    s.kind = 'capture';
+    if (player.isSpeaking()) { lastCut = player.cutPosition(); }
+    player.stop(); // §4.2: kill her audio immediately
+    talkBtn.classList.add('listening'); talkBtn.textContent = '● LIVE';
+    setMode('listening', 'listening…');
+    sidecar.start();
+    spec.arm(() => s.text, (partial) => chatBody(partial));
+  };
+
+  s.rec.onresult = (e) => {
+    let all = '';
+    for (const res of e.results) all += res[0].transcript + ' ';
+    all = all.trim();
+    if (s.kind === 'watch') {
+      // echo filter: ignore her own voice leaking into the mic
+      const words = all.toLowerCase().match(/[a-z']+/g) || [];
+      if (words.length < 2) return;
+      const hers = new Set(player.recentWords());
+      const overlap = words.filter((w) => hers.has(w)).length / words.length;
+      slog('watch overlap=' + overlap.toFixed(2) + ' "' + all.slice(0, 25) + '" hers=' + hers.size);
+      if (overlap >= 0.6) { // it's her — drop the buffer and keep watching
+        try { s.rec.abort(); } catch (_) {}
+        return;
+      }
+      promoteToCapture();
+    }
+    s.text = all;
+    statusEl.textContent = '“' + s.text + '”';
+    resetSilence();
+  };
+  s.rec.onerror = (e) => {
+    if (s.dead) return;
+    if (e.error === 'not-allowed') { stopSession(); setMode('idle', 'allow microphone access, then retry'); return; }
+    // transient (no-speech etc.) — onend decides what happens next
+  };
+  s.rec.onend = () => {
+    if (s.dead) return;
+    const kind = s.kind, said = s.text.trim();
+    if (kind === 'watch' && !said) {
+      // browser recycled the recognizer while she talks — keep watching
+      if (player.isSpeaking()) { s.dead = true; session = null; startSession('watch'); return; }
+      s.dead = true; session = null; return;
+    }
+    slog('session end ' + kind + ' said=' + JSON.stringify(said.slice(0, 20)));
+    s.dead = true; session = null;
+    stopUi();
+    spec.disarm();
+    if (said) {
+      turnEndAt = Date.now();
+      lastInputWasVoice = true;
+      handleUtterance(said, sidecar.stop(said));
+    } else {
+      sidecar.stop('');
+      setMode('idle', ' ');
+    }
+  };
+
+  if (kind === 'capture') {
+    if (player.isSpeaking()) { lastCut = player.cutPosition(); }
+    player.stop();
+    warmBridges();
+    talkBtn.classList.add('listening'); talkBtn.textContent = '● LIVE';
+    setMode('listening', 'listening…');
+    sidecar.start();
+    spec.arm(() => s.text, (partial) => chatBody(partial));
+    resetSilence();
+  }
+  s.capTimer = setTimeout(commit, 30000);
+  try { s.rec.start(); } catch (_) {}
+}
+
+function stopUi() { talkBtn.classList.remove('listening'); talkBtn.textContent = 'TALK'; }
 
 let conversationMode = false;
 $('#convBtn').onclick = () => {
@@ -464,12 +613,21 @@ function chatBody(userText) {
 
 function beginSpeaking(tone) {
   player.begin(
-    () => { stats.lastTtfa = Date.now() - turnEndAt; setMode('speaking', ' '); showStats(tone); },
-    () => { setMode('idle', conversationMode ? 'listening again…' : ' '); if (conversationMode) setTimeout(startListening, 350); },
+    () => {
+      stats.lastTtfa = Date.now() - turnEndAt;
+      setMode('speaking', ' ');
+      showStats(tone);
+      // §4.2: while she talks, keep an ear open — speaking over her interrupts her
+      if (lastInputWasVoice || conversationMode) startSession('watch');
+    },
+    () => {
+      stopSession();
+      setMode('idle', conversationMode ? 'listening again…' : ' ');
+      if (conversationMode) setTimeout(() => startSession('capture'), 300);
+    },
   );
 }
 
-/** Streaming turn: play each shaped clause the moment the model finishes it. */
 async function streamTurn(body, pennyEl, bridgeTimer) {
   const r = await fetch('/api/chat-stream', {
     method: 'POST',
@@ -527,10 +685,10 @@ async function handleUtterance(text, affect) {
       }
       addMsg('PENNY', reply);
       beginSpeaking(null);
-      player.enqueue({ text: reply, rate: 1.05, pitch: 1, volume: 1 });
+      player.enqueue({ text: reply, rate: 1.0, pitch: 1, volume: 1 });
       player.finish();
     } else {
-      const cached = spec.take(text);
+      const cached = await spec.take(text);
       if (cached) {
         speculativeHit = true;
         reply = cached.reply || '…';
@@ -538,7 +696,7 @@ async function handleUtterance(text, affect) {
         api('/api/log', { user: text, reply, conversation_id: conversationId }).then((res) => { conversationId = conversationId || res.conversation_id; }).catch(() => {});
         addMsg('PENNY', reply);
         beginSpeaking(tone);
-        for (const seg of cached.segments || [{ text: reply, rate: 1.05, pitch: 1, volume: 1 }]) player.enqueue(seg);
+        for (const seg of cached.segments || [{ text: reply, rate: 1.0, pitch: 1, volume: 1 }]) player.enqueue(seg);
         player.finish();
       } else {
         const body = chatBody(text);
@@ -550,11 +708,10 @@ async function handleUtterance(text, affect) {
         try {
           result = await streamTurn(body, pennyEl, bridgeTimer);
         } catch (_) {
-          // stream broke → plain request
           clearTimeout(bridgeTimer);
           result = await api('/api/chat', body);
           pennyEl.textContent = result.reply || '…';
-          for (const seg of result.segments || [{ text: result.reply, rate: 1.05, pitch: 1, volume: 1 }]) player.enqueue(seg);
+          for (const seg of result.segments || [{ text: result.reply, rate: 1.0, pitch: 1, volume: 1 }]) player.enqueue(seg);
         } finally {
           clearTimeout(bridgeTimer);
         }
@@ -579,7 +736,10 @@ async function handleUtterance(text, affect) {
   }
 }
 
-talkBtn.onclick = () => (listening ? rec && rec.stop() : startListening());
+talkBtn.onclick = () => {
+  if (session && session.kind === 'capture') { try { session.rec.stop(); } catch (_) {} return; }
+  startSession('capture');
+};
 $('#send').onclick = sendTyped;
 textIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') sendTyped(); });
 function sendTyped() {
@@ -587,6 +747,8 @@ function sendTyped() {
   if (!t) return;
   textIn.value = '';
   turnEndAt = Date.now();
+  lastInputWasVoice = false;
+  stopSession();
   warmBridges();
   handleUtterance(t, null);
 }
