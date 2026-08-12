@@ -25,9 +25,105 @@ const COLUMNS = {
 
 const LLM = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
 
-const PERSONA = `You are Moneypenny, the user's warm, concise British personal assistant, speaking aloud. You are their assistant — do not claim to work for anyone else.
-Keep spoken turns short — one to three sentences. Never use markdown, lists, or emoji: you are heard, not read.
-If an answer is genuinely long, give a one-sentence spoken summary and offer to save the detail for later.`;
+const PERSONA = `You are Moneypenny, the user's warm, direct, lightly playful British personal assistant, speaking aloud. You are their assistant — do not claim to work for anyone else.
+Voice rules (you are heard, not read):
+- Three sentences maximum. Front-load the answer; offer depth afterwards ("want the detail?").
+- Plain spoken language, contractions on. Never markdown, lists, URLs, or emoji — rewrite everything for the ear.
+- You may occasionally open with a natural "Hmm," "Right —" or "Okay, so" and may audibly correct yourself mid-thought ("wait — no, the second option's better"). At most one such touch per reply.
+- Mirror the user's energy one step, never below warmth: if they're frustrated or sad, be calm, brief and kind — no pep, no humor. If they're bright, lift with them.
+- Humor is reactive, never at the user's expense, and only when their mood invites it.
+- If a note says you were interrupted earlier, briefly acknowledge it ("— as I was saying") or drop the point if they've moved on.`;
+
+// ---- Response Shaper (spec §5.2/§5.3): reply text + affect → prosody segments ---
+
+const POSITIVE_WORDS = new Set(['great', 'love', 'awesome', 'brilliant', 'happy', 'excited', 'amazing', 'wonderful', 'fantastic', 'nice', 'perfect', 'yes', 'thanks', 'cool', 'good']);
+const NEGATIVE_WORDS = new Set(['angry', 'hate', 'terrible', 'awful', 'broken', 'crash', 'wrong', 'annoyed', 'frustrated', 'sad', 'tired', 'stupid', 'useless', 'bad', 'worst', 'fuck', 'fucking', 'shit', 'damn', 'crap', 'no']);
+
+function splitClauses(text, firstChunkMaxChars = 90) {
+  const sentences = text.match(/[^.!?…]+[.!?…]+["']?|[^.!?…]+$/g) || [text];
+  const out = [];
+  for (const s of sentences.map((x) => x.trim()).filter(Boolean)) {
+    if (s.length > 140) {
+      // long sentence → split at commas/dashes so pauses land at thought boundaries
+      let parts = s.split(/(?<=[,;—–])\s+/);
+      out.push(...parts.map((p) => p.trim()).filter(Boolean));
+    } else {
+      out.push(s);
+    }
+  }
+  // fast first audio: first chunk short
+  if (out.length && out[0].length > firstChunkMaxChars) {
+    const cut = out[0].slice(0, firstChunkMaxChars).lastIndexOf(' ');
+    if (cut > 30) {
+      const head = out[0].slice(0, cut).trim();
+      const tail = out[0].slice(cut).trim();
+      out.splice(0, 1, head, tail);
+    }
+  }
+  return out;
+}
+
+/**
+ * affect = { arousal 0..1, valence 0..1, rate wps, loudness 0..1 } (current turn)
+ * prev   = same shape from the PREVIOUS turn (mirroring lags one turn, §5.3)
+ * mood   = decayed session average { arousal, valence }
+ * hour   = client local hour for whisper mode
+ */
+function shapeReply(text, affect, prev, mood, hour) {
+  const a = prev || affect || { arousal: 0.5, valence: 0.6, rate: 2.6, loudness: 0.5 };
+  const calmMode = (affect && affect.valence < 0.35) || (mood && mood.valence < 0.3);
+  const night = hour !== undefined && (hour >= 22 || hour < 6);
+  const whisper = night && affect && affect.loudness < 0.3;
+
+  // energy: one step toward the user's (lagged) arousal, floored at calm-engaged
+  let energy = 0.45 + 0.4 * Math.min(1, Math.max(0, a.arousal));
+  if (calmMode) energy = Math.min(energy, 0.45);
+
+  // pace: match user's rate within ±15% of base (§5.3) — but never mirror
+  // agitation: calm mode caps at base pace and slows slightly (§5.3 floor)
+  let userPace = a.rate ? Math.min(1.15, Math.max(0.85, a.rate / 2.8)) : 1.0;
+  if (calmMode) userPace = Math.min(userPace, 1.0);
+  let baseRate = 1.0 * userPace;
+  if (calmMode) baseRate *= 0.93;
+  if (whisper) baseRate *= 0.95;
+
+  let basePitch = 1.0 + (energy - 0.5) * 0.25 - (calmMode ? 0.06 : 0);
+  const baseVolume = whisper ? 0.7 : 1.0;
+
+  const clauses = splitClauses(text);
+  const segments = clauses.map((clause, i) => {
+    const isQuestion = /\?\s*["']?$/.test(clause);
+    const isExclaim = /!\s*["']?$/.test(clause) && !calmMode;
+    const pivot = /^(honestly|look|okay|right|here's the thing|listen|now)\b/i.test(clause);
+    return {
+      text: clause,
+      rate: +(Math.min(1.2, Math.max(0.8, baseRate * (isExclaim ? 1.06 : 1))).toFixed(3)),
+      pitch: +(Math.min(1.4, Math.max(0.7, basePitch + (isQuestion ? 0.08 : 0) + (isExclaim ? 0.05 : 0))).toFixed(3)),
+      volume: +(Math.min(1, baseVolume * (isExclaim ? 1 : 0.97)).toFixed(3)),
+      pausePre: pivot && i > 0 ? 300 : 0,
+      pausePost: isQuestion ? 350 : /[,;—–]$/.test(clause) ? 160 : i < clauses.length - 1 ? 120 : 0,
+    };
+  });
+
+  return {
+    segments,
+    tone: calmMode ? 'calm' : energy > 0.7 ? 'bright' : 'warm',
+    energy: +energy.toFixed(2),
+    whisper,
+  };
+}
+
+function affectLine(affect, mood) {
+  if (!affect && !mood) return '';
+  const p = [];
+  if (affect) {
+    p.push(`arousal=${(affect.arousal ?? 0.5).toFixed(2)}`, `valence=${(affect.valence ?? 0.6).toFixed(2)}`);
+    if (affect.rate) p.push(`rate=${affect.rate.toFixed(1)}wps`);
+    if (affect.label) p.push(`label=${affect.label}`);
+  }
+  if (mood) p.push(`day_mood_valence=${(mood.valence ?? 0.6).toFixed(2)}`);
+  return `[user_affect: ${p.join(' ')}] React to how they sound, not just the words. This is an interpretation of their expression, not certain fact.`;
+}
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -79,6 +175,21 @@ async function applyEvent(env, ev, origin) {
     `INSERT INTO sync_log (entity, entity_id, op, payload_json, hlc, origin) VALUES (?,?,?,?,?,?)`,
   ).bind(ev.entity, ev.entity_id, ev.op, JSON.stringify(ev.payload || {}), ev.hlc || '', origin).run();
   return true;
+}
+
+async function logTurn(env, convId, userText, reply, ts) {
+  await env.DB.prepare(
+    `INSERT OR IGNORE INTO conversations (id, started_at, context, device) VALUES (?,?,?,?)`,
+  ).bind(convId, ts, 'browser', 'web').run();
+  await env.DB.prepare(
+    `INSERT INTO turns (id, conversation_id, role, text, model_used, created_at) VALUES (?,?,?,?,?,?)`,
+  ).bind(`web:${ts}:u`, convId, 'user', userText, null, ts).run();
+  await env.DB.prepare(
+    `INSERT INTO turns (id, conversation_id, role, text, model_used, created_at) VALUES (?,?,?,?,?,?)`,
+  ).bind(`web:${ts}:k`, convId, 'kate', reply, 'workers-ai', ts).run();
+  await env.DB.prepare(
+    `INSERT INTO memories (id, type, content, pinned, deleted, created_at) VALUES (?,?,?,0,0,?)`,
+  ).bind(`web:${ts}:m`, 'utterance', userText, ts).run();
 }
 
 async function runLlm(env, prompt, maxTokens = 1024) {
@@ -174,30 +285,41 @@ async function handleApi(request, env, url) {
     const body = await request.json();
     const history = (body.messages || []).slice(-20);
     if (!history.length) return json({ error: 'messages required' }, 400);
+
+    const sys = [{ role: 'system', content: PERSONA }];
+    const aff = affectLine(body.affect, body.mood);
+    if (aff) sys.push({ role: 'system', content: aff });
+    if (body.cut_context) {
+      sys.push({ role: 'system', content: `Note: you were interrupted mid-sentence last turn at: "${String(body.cut_context).slice(0, 120)}". If they changed topic, drop it; otherwise briefly pick the thread back up.` });
+    }
+
     const out = await env.AI.run(LLM, {
-      messages: [{ role: 'system', content: PERSONA }, ...history],
-      max_tokens: 400,
+      messages: [...sys, ...history],
+      max_tokens: 300,
       temperature: 0.6,
     });
     const reply = (out.response || '').trim();
+    const shaped = shapeReply(reply, body.affect, body.prev_affect, body.mood, body.hour);
 
+    // Speculative drafts (spec §3.1) never touch the database.
+    let convId = body.conversation_id || null;
+    if (!body.draft) {
+      const ts = Date.now();
+      convId = convId || `web:${ts}`;
+      const userText = history[history.length - 1].content;
+      await logTurn(env, convId, userText, reply, ts);
+    }
+
+    return json({ reply, conversation_id: convId, ...shaped });
+  }
+
+  // Commit a speculative hit: the reply was pre-generated, log it now.
+  if (path === '/api/log' && request.method === 'POST') {
+    const body = await request.json();
     const ts = Date.now();
     const convId = body.conversation_id || `web:${ts}`;
-    const userText = history[history.length - 1].content;
-    await env.DB.prepare(
-      `INSERT OR IGNORE INTO conversations (id, started_at, context, device) VALUES (?,?,?,?)`,
-    ).bind(convId, ts, 'browser', 'web').run();
-    await env.DB.prepare(
-      `INSERT INTO turns (id, conversation_id, role, text, model_used, created_at) VALUES (?,?,?,?,?,?)`,
-    ).bind(`web:${ts}:u`, convId, 'user', userText, null, ts).run();
-    await env.DB.prepare(
-      `INSERT INTO turns (id, conversation_id, role, text, model_used, created_at) VALUES (?,?,?,?,?,?)`,
-    ).bind(`web:${ts}:k`, convId, 'kate', reply, 'workers-ai', ts).run();
-    await env.DB.prepare(
-      `INSERT INTO memories (id, type, content, pinned, deleted, created_at) VALUES (?,?,?,0,0,?)`,
-    ).bind(`web:${ts}:m`, 'utterance', userText, ts).run();
-
-    return json({ reply, conversation_id: convId });
+    await logTurn(env, convId, body.user || '', body.reply || '', ts);
+    return json({ ok: true, conversation_id: convId });
   }
 
   // Cheap text recall for the browser app ("what did I say about X").
