@@ -11,11 +11,11 @@
   * { box-sizing:border-box; margin:0; -webkit-tap-highlight-color:transparent; }
   body { background:var(--base); color:var(--text); font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
          height:100dvh; display:flex; flex-direction:column; overflow:hidden; }
-  header { display:flex; align-items:center; gap:10px; padding:14px 18px; }
+  header { display:flex; align-items:center; gap:8px; padding:14px 16px; flex-wrap:wrap; }
   h1 { color:var(--red); font-weight:500; letter-spacing:.15em; font-size:1.05rem; }
   .pill { font-size:.6rem; letter-spacing:.12em; color:var(--dim); border:1px solid var(--line);
-          border-radius:999px; padding:4px 10px; }
-  #convBtn.on { color:var(--red); border-color:var(--red); }
+          border-radius:999px; padding:4px 10px; cursor:pointer; user-select:none; }
+  .pill.on { color:var(--red); border-color:var(--red); }
   #orbWrap { display:flex; justify-content:center; padding:6px 0 0; }
   canvas#orb { width:190px; height:190px; }
   #status { text-align:center; color:var(--dim); font-size:.8rem; min-height:1.4em; padding:4px 16px; }
@@ -41,8 +41,9 @@
 <body>
 <header>
   <h1>MONEYPENNY</h1>
-  <span class="pill" id="brainPill">BRAIN·CLOUD</span>
   <span class="pill" id="convBtn">AUTO-LISTEN</span>
+  <span class="pill on" id="voiceBtn">VOICE·HER</span>
+  <span class="pill" id="pickBtn" style="display:none">▸ PHONE VOICE</span>
   <span class="pill" style="margin-left:auto"><a href="/dashboard" style="color:inherit;text-decoration:none">DASH</a></span>
 </header>
 <div id="orbWrap"><canvas id="orb" width="380" height="380"></canvas></div>
@@ -134,9 +135,9 @@ function addMsg(who, text) {
   return d;
 }
 
-// ============ VOICE MODULATION (spec §5) ============
+// ============ VOICE MODULATION ============
 
-// ---- affect sidecar: energy from mic, valence from words (§5.1) ----
+// ---- affect sidecar (§5.1) ----
 const POS = new Set(['great','love','awesome','brilliant','happy','excited','amazing','wonderful','fantastic','nice','perfect','yes','thanks','cool','good','haha','funny']);
 const NEG = new Set(['angry','hate','terrible','awful','broken','crash','wrong','annoyed','frustrated','sad','tired','stupid','useless','bad','worst','fuck','fucking','shit','damn','crap','no','not']);
 const sidecar = {
@@ -168,7 +169,7 @@ const sidecar = {
     const varr = voiced.length ? voiced.reduce((a, b) => a + (b - mean) ** 2, 0) / voiced.length : 0;
     const loud = Math.min(1, mean * 8);
     const words = (finalText.match(/\S+/g) || []).length;
-    const rate = words / dur; // words per second
+    const rate = words / dur;
     let pos = 0, neg = 0;
     for (const w of finalText.toLowerCase().match(/[a-z']+/g) || []) {
       if (POS.has(w)) pos++;
@@ -184,7 +185,7 @@ const sidecar = {
   },
 };
 
-// ---- session mood: decayed average, half-life 3.5h, persisted (§5.3) ----
+// ---- session mood (§5.3) ----
 const HALF_LIFE_MS = 3.5 * 3600 * 1000;
 function loadMood() { try { return JSON.parse(localStorage.getItem('kate_mood')) || null; } catch { return null; } }
 function updateMood(affect) {
@@ -203,70 +204,164 @@ function updateMood(affect) {
   return mood;
 }
 
-// ---- speech out: segment player with prosody + cut tracking (§5.2, §4.2) ----
-let voice = null;
+// ---- voice engines: HER (server Aura, British female) or PHONE (browser) ----
+let voiceMode = localStorage.getItem('penny_voice_mode') || 'cloud';
+let browserVoice = null, browserVoiceName = localStorage.getItem('penny_browser_voice') || null;
+function enVoices() {
+  return speechSynthesis.getVoices().filter((v) => /^en/i.test(v.lang));
+}
 function pickVoice() {
-  const vs = speechSynthesis.getVoices();
-  voice = vs.find((v) => /en[-_]GB/i.test(v.lang) && /female|Kate|Serena|Sonia|Libby/i.test(v.name))
+  const vs = enVoices();
+  browserVoice = (browserVoiceName && vs.find((v) => v.name === browserVoiceName))
+    || vs.find((v) => /en[-_]GB/i.test(v.lang) && /female|Kate|Serena|Sonia|Libby/i.test(v.name))
     || vs.find((v) => /en[-_]GB/i.test(v.lang))
-    || vs.find((v) => /^en/i.test(v.lang)) || null;
+    || vs[0] || null;
 }
 speechSynthesis.onvoiceschanged = pickVoice; pickVoice();
+function refreshVoicePills() {
+  $('#voiceBtn').textContent = voiceMode === 'cloud' ? 'VOICE·HER' : 'VOICE·PHONE';
+  $('#voiceBtn').classList.toggle('on', voiceMode === 'cloud');
+  $('#pickBtn').style.display = voiceMode === 'browser' ? '' : 'none';
+  if (voiceMode === 'browser' && browserVoice) $('#pickBtn').textContent = '▸ ' + browserVoice.name.slice(0, 22).toUpperCase();
+}
+$('#voiceBtn').onclick = () => {
+  voiceMode = voiceMode === 'cloud' ? 'browser' : 'cloud';
+  localStorage.setItem('penny_voice_mode', voiceMode);
+  refreshVoicePills();
+};
+$('#pickBtn').onclick = () => {
+  const vs = enVoices();
+  if (!vs.length) return;
+  const i = vs.findIndex((v) => browserVoice && v.name === browserVoice.name);
+  browserVoice = vs[(i + 1) % vs.length];
+  browserVoiceName = browserVoice.name;
+  localStorage.setItem('penny_browser_voice', browserVoiceName);
+  refreshVoicePills();
+  const u = new SpeechSynthesisUtterance('Hello, this is how I sound.');
+  u.voice = browserVoice; u.pitch = 1; u.rate = 1.05;
+  speechSynthesis.cancel(); speechSynthesis.speak(u);
+};
+refreshVoicePills();
 
+async function fetchTtsBlob(text, signal) {
+  const r = await fetch('/api/tts', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: 'Bearer ' + token() },
+    body: JSON.stringify({ text }), signal,
+  });
+  if (!r.ok) throw new Error('tts ' + r.status);
+  return URL.createObjectURL(await r.blob());
+}
+
+// ---- unified segment player: streams in, speaks in order, tracks cut point ----
 const player = {
-  playing: false, cancelled: false, spokenSoFar: '', currentSeg: '', segChar: 0,
-  play(segments, onFirstAudio, onDone) {
+  q: [], playing: false, cancelled: false, inputDone: false,
+  spokenSoFar: '', currentSeg: '', progress: 0,
+  audioEl: null, onFirstAudio: null, onAllDone: null, first: true,
+  begin(onFirstAudio, onAllDone) {
     this.stop();
-    this.playing = true; this.cancelled = false; this.spokenSoFar = '';
-    let first = true;
-    const next = (i) => {
-      if (this.cancelled || i >= segments.length) { this.playing = false; if (!this.cancelled && onDone) onDone(); return; }
-      const seg = segments[i];
-      const go = () => {
-        if (this.cancelled) return;
-        const u = new SpeechSynthesisUtterance(seg.text);
-        if (voice) u.voice = voice;
-        u.rate = seg.rate || 1; u.pitch = seg.pitch || 1; u.volume = seg.volume ?? 1;
-        this.currentSeg = seg.text; this.segChar = 0;
-        u.onstart = () => { if (first) { first = false; onFirstAudio && onFirstAudio(); } };
-        u.onboundary = (e) => { this.segChar = e.charIndex || 0; };
-        u.onend = () => {
-          this.spokenSoFar += seg.text + ' ';
-          setTimeout(() => next(i + 1), this.cancelled ? 0 : (seg.pausePost || 0));
-        };
-        u.onerror = () => next(i + 1);
-        speechSynthesis.speak(u);
-      };
-      setTimeout(go, seg.pausePre || 0);
-    };
-    next(0);
+    this.q = []; this.playing = false; this.cancelled = false; this.inputDone = false;
+    this.spokenSoFar = ''; this.currentSeg = ''; this.progress = 0; this.first = true;
+    this.onFirstAudio = onFirstAudio; this.onAllDone = onAllDone;
+  },
+  enqueue(seg) {
+    if (this.cancelled) return;
+    if (voiceMode === 'cloud') seg.__audio = fetchTtsBlob(seg.text).catch(() => null); // prefetch in parallel
+    this.q.push(seg);
+    if (!this.playing) { this.playing = true; this.loop(); }
+  },
+  finish() {
+    this.inputDone = true;
+    if (!this.playing && !this.q.length && !this.cancelled && this.onAllDone) this.onAllDone();
+  },
+  async loop() {
+    while (!this.cancelled) {
+      const seg = this.q.shift();
+      if (!seg) {
+        this.playing = false;
+        if (this.inputDone && !this.cancelled && this.onAllDone) this.onAllDone();
+        return;
+      }
+      if (seg.pausePre) await new Promise((r) => setTimeout(r, seg.pausePre));
+      if (this.cancelled) return;
+      this.currentSeg = seg.text; this.progress = 0;
+      try {
+        if (voiceMode === 'cloud') await this.playCloud(seg);
+        else await this.playBrowser(seg);
+      } catch (_) { /* segment failed — keep going */ }
+      if (this.cancelled) return;
+      this.spokenSoFar += seg.text + ' ';
+      if (seg.pausePost) await new Promise((r) => setTimeout(r, seg.pausePost));
+    }
+  },
+  async playCloud(seg) {
+    const url = await seg.__audio;
+    if (!url) return this.playBrowser(seg); // tts failed → phone voice for this clause
+    if (this.cancelled) return;
+    await new Promise((resolve) => {
+      const a = new Audio(url);
+      this.audioEl = a;
+      a.playbackRate = Math.min(1.3, Math.max(0.8, seg.rate || 1));
+      a.volume = seg.volume ?? 1;
+      a.onplaying = () => { if (this.first) { this.first = false; this.onFirstAudio && this.onFirstAudio(); } };
+      a.ontimeupdate = () => { if (a.duration) this.progress = a.currentTime / a.duration; };
+      a.onended = () => { URL.revokeObjectURL(url); resolve(); };
+      a.onerror = () => resolve();
+      a.play().catch(() => resolve());
+    });
+    this.audioEl = null;
+  },
+  playBrowser(seg) {
+    return new Promise((resolve) => {
+      const u = new SpeechSynthesisUtterance(seg.text);
+      if (browserVoice) u.voice = browserVoice;
+      u.rate = seg.rate || 1; u.pitch = seg.pitch || 1; u.volume = seg.volume ?? 1;
+      u.onstart = () => { if (this.first) { this.first = false; this.onFirstAudio && this.onFirstAudio(); } };
+      u.onboundary = (e) => { this.progress = seg.text.length ? (e.charIndex || 0) / seg.text.length : 0; };
+      u.onend = resolve; u.onerror = resolve;
+      speechSynthesis.speak(u);
+    });
   },
   stop() {
-    this.cancelled = true; this.playing = false;
+    this.cancelled = true; this.playing = false; this.q = [];
+    if (this.audioEl) { try { this.audioEl.pause(); } catch (_) {} this.audioEl = null; }
     speechSynthesis.cancel();
   },
-  /** where she was cut off, for the acknowledgment next turn (§4.2) */
   cutPosition() {
-    return (this.spokenSoFar + this.currentSeg.slice(0, this.segChar + 20)).trim().slice(-100);
+    const idx = Math.floor(this.currentSeg.length * Math.min(1, this.progress + 0.15));
+    return (this.spokenSoFar + this.currentSeg.slice(0, idx)).trim().slice(-100);
   },
+  isSpeaking() { return this.playing && !this.cancelled; },
 };
 
-// ---- filler bridge (§3.2): one per turn, register-matched ----
-function bridgeFor(mood) {
-  const v = mood ? mood.valence : 0.6;
-  const opts = v < 0.4 ? ['Mm, let me think.', 'Okay — one moment.']
-    : v > 0.7 ? ['Ooh — okay, so…', 'Right, let me see —']
-      : ['Hmm —', 'Okay, so…', 'Let me look…'];
-  return opts[Math.floor(Math.random() * opts.length)];
+// ---- filler bridges (§3.2): pre-synthesized so they play instantly ----
+const BRIDGES = {
+  low: ['Mm, let me think.', 'Okay — one moment.'],
+  mid: ['Hmm —', 'Okay, so…', 'Let me look…'],
+  high: ['Ooh — okay, so…', 'Right, let me see —'],
+};
+const bridgeCache = new Map();
+function warmBridges() {
+  if (voiceMode !== 'cloud' || bridgeCache.size) return;
+  for (const list of Object.values(BRIDGES)) {
+    for (const t of list) fetchTtsBlob(t).then((u) => bridgeCache.set(t, u)).catch(() => {});
+  }
 }
-function speakBridge(textStr) {
-  const u = new SpeechSynthesisUtterance(textStr);
-  if (voice) u.voice = voice;
-  u.rate = 1.0; u.pitch = 1.0; u.volume = 0.9;
-  speechSynthesis.speak(u);
+function speakBridge() {
+  const v = (loadMood() || {}).valence ?? 0.6;
+  const list = v < 0.4 ? BRIDGES.low : v > 0.7 ? BRIDGES.high : BRIDGES.mid;
+  const t = list[Math.floor(Math.random() * list.length)];
+  if (voiceMode === 'cloud' && bridgeCache.has(t)) {
+    new Audio(bridgeCache.get(t)).play().catch(() => {});
+  } else {
+    const u = new SpeechSynthesisUtterance(t);
+    if (browserVoice) u.voice = browserVoice;
+    u.rate = 1.0; u.pitch = 1.0; u.volume = 0.9;
+    speechSynthesis.speak(u);
+  }
 }
 
-// ---- speculation (§3.1): draft on stable partials, accept on similarity ----
+// ---- speculation (§3.1) ----
 function jaccard(a, b) {
   const A = new Set(a.toLowerCase().match(/[a-z']+/g) || []);
   const B = new Set(b.toLowerCase().match(/[a-z']+/g) || []);
@@ -285,8 +380,13 @@ const spec = {
       this.ctrl && this.ctrl.abort();
       this.ctrl = new AbortController();
       try {
-        this.draft = { basis: partial, res: await api('/api/chat', { ...buildBody(partial), draft: true }, this.ctrl.signal) };
-      } catch (_) { /* aborted or failed — fine */ }
+        const res = await api('/api/chat', { ...buildBody(partial), draft: true }, this.ctrl.signal);
+        // pre-synthesize the first clause too: a hit then starts in ~0ms
+        if (voiceMode === 'cloud' && res.segments && res.segments[0]) {
+          res.segments[0].__audio = fetchTtsBlob(res.segments[0].text).catch(() => null);
+        }
+        this.draft = { basis: partial, res };
+      } catch (_) {}
     }, 700);
   },
   disarm() { clearInterval(this.timer); this.timer = null; if (this.ctrl) this.ctrl.abort(); },
@@ -313,9 +413,9 @@ let rec = null, listening = false, interimText = '';
 if (!SR) { talkBtn.disabled = true; statusEl.textContent = 'voice input needs Chrome — typing still works'; }
 function startListening() {
   if (!SR || listening) return;
-  // barge-in: cut her off fast, remember where (§4.2)
-  if (player.playing) { lastCut = player.cutPosition(); player.stop(); }
-  else speechSynthesis.cancel();
+  if (player.isSpeaking()) { lastCut = player.cutPosition(); }
+  player.stop();
+  warmBridges();
   rec = new SR();
   rec.lang = 'en-GB'; rec.interimResults = true; rec.continuous = false;
   listening = true; interimText = '';
@@ -362,56 +462,117 @@ function chatBody(userText) {
   };
 }
 
+function beginSpeaking(tone) {
+  player.begin(
+    () => { stats.lastTtfa = Date.now() - turnEndAt; setMode('speaking', ' '); showStats(tone); },
+    () => { setMode('idle', conversationMode ? 'listening again…' : ' '); if (conversationMode) setTimeout(startListening, 350); },
+  );
+}
+
+/** Streaming turn: play each shaped clause the moment the model finishes it. */
+async function streamTurn(body, pennyEl, bridgeTimer) {
+  const r = await fetch('/api/chat-stream', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: 'Bearer ' + token() },
+    body: JSON.stringify(body),
+  });
+  if (!r.ok || !r.body) throw new Error('stream ' + r.status);
+  const reader = r.body.getReader();
+  const decoder = new TextDecoder();
+  let sse = '', result = null;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    sse += decoder.decode(value, { stream: true });
+    const lines = sse.split('\n');
+    sse = lines.pop() || '';
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue;
+      let ev;
+      try { ev = JSON.parse(line.slice(6)); } catch { continue; }
+      if (ev.segment) {
+        clearTimeout(bridgeTimer);
+        pennyEl.textContent = (pennyEl.textContent + ' ' + ev.segment.text).trim();
+        logEl.scrollTop = logEl.scrollHeight;
+        player.enqueue(ev.segment);
+      } else if (ev.done) {
+        result = ev;
+      } else if (ev.error) {
+        throw new Error(ev.error);
+      }
+    }
+  }
+  if (!result) throw new Error('stream ended without result');
+  return result;
+}
+
 async function handleUtterance(text, affect) {
   addMsg('YOU', text);
   setMode('thinking', 'thinking…');
   affect = affect || { arousal: 0.5, valence: 0.6, rate: 2.6, loudness: 0.5, label: null };
   try {
-    let reply, segments = null, tone = null, speculativeHit = false;
+    let reply, tone = null, speculativeHit = false;
     const rm = text.match(RECALL);
-    if (rm) {
-      const q = (rm[1] || rm[2]).trim();
-      const hits = await api('/api/recall', { query: q });
-      reply = hits.length
-        ? `About ${q} — on ${new Date(hits[0].created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'long' })} you said: “${hits[0].content}”.`
-        : `I don't have anything about ${q} in my memory yet.`;
-    } else if (/^(?:moneypenny[,;]?\s*)?forget (?:that|it|this)\.?$/i.test(text)) {
-      reply = (await api('/api/forget-last', {})).forgotten ? "Forgotten. It's gone from my memory." : 'There was nothing recent to forget.';
-    } else if (/^(?:moneypenny[,;]?\s*)?pin (?:that|this|it)\.?$/i.test(text)) {
-      reply = (await api('/api/pin-last', {})).pinned ? "Pinned. I'll keep that permanently." : 'There was nothing recent to pin.';
+    if (rm || /^(?:moneypenny[,;]?\s*)?(?:forget|pin) (?:that|it|this)\.?$/i.test(text)) {
+      if (rm) {
+        const q = (rm[1] || rm[2]).trim();
+        const hits = await api('/api/recall', { query: q });
+        reply = hits.length
+          ? `About ${q} — on ${new Date(hits[0].created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'long' })} you said: “${hits[0].content}”.`
+          : `I don't have anything about ${q} in my memory yet.`;
+      } else if (/forget/i.test(text)) {
+        reply = (await api('/api/forget-last', {})).forgotten ? "Forgotten. It's gone from my memory." : 'There was nothing recent to forget.';
+      } else {
+        reply = (await api('/api/pin-last', {})).pinned ? "Pinned. I'll keep that permanently." : 'There was nothing recent to pin.';
+      }
+      addMsg('PENNY', reply);
+      beginSpeaking(null);
+      player.enqueue({ text: reply, rate: 1.05, pitch: 1, volume: 1 });
+      player.finish();
     } else {
       const cached = spec.take(text);
-      let res;
       if (cached) {
         speculativeHit = true;
-        res = cached;
-        api('/api/log', { user: text, reply: cached.reply, conversation_id: conversationId }).then((r) => { conversationId = conversationId || r.conversation_id; }).catch(() => {});
+        reply = cached.reply || '…';
+        tone = cached.tone;
+        api('/api/log', { user: text, reply, conversation_id: conversationId }).then((res) => { conversationId = conversationId || res.conversation_id; }).catch(() => {});
+        addMsg('PENNY', reply);
+        beginSpeaking(tone);
+        for (const seg of cached.segments || [{ text: reply, rate: 1.05, pitch: 1, volume: 1 }]) player.enqueue(seg);
+        player.finish();
       } else {
         const body = chatBody(text);
         body.affect = affect;
-        // filler bridge if she's slow and we had no draft (§3.2)
-        const bridgeTimer = setTimeout(() => speakBridge(bridgeFor(loadMood())), 600);
-        try { res = await api('/api/chat', body); } finally { clearTimeout(bridgeTimer); }
-        conversationId = res.conversation_id || conversationId;
+        const bridgeTimer = setTimeout(speakBridge, 600);
+        const pennyEl = addMsg('PENNY', '');
+        beginSpeaking(null);
+        let result;
+        try {
+          result = await streamTurn(body, pennyEl, bridgeTimer);
+        } catch (_) {
+          // stream broke → plain request
+          clearTimeout(bridgeTimer);
+          result = await api('/api/chat', body);
+          pennyEl.textContent = result.reply || '…';
+          for (const seg of result.segments || [{ text: result.reply, rate: 1.05, pitch: 1, volume: 1 }]) player.enqueue(seg);
+        } finally {
+          clearTimeout(bridgeTimer);
+        }
+        player.finish();
+        reply = result.reply || pennyEl.textContent;
+        tone = result.tone;
+        pennyEl.textContent = reply;
+        conversationId = result.conversation_id || conversationId;
+        showStats(tone);
       }
-      reply = res.reply || '…';
-      segments = res.segments;
-      tone = res.tone;
       chatHistory.push({ role: 'user', content: text }, { role: 'assistant', content: reply });
       stats.turns++;
       if (speculativeHit) stats.specHits++;
+      showStats(tone);
     }
     lastCut = null;
     prevAffect = affect;
     updateMood(affect);
-    addMsg('PENNY', reply);
-    setMode('speaking', ' ');
-    const segs = (segments && segments.length) ? segments : [{ text: reply, rate: 1, pitch: 1, volume: 1 }];
-    player.play(
-      segs,
-      () => { stats.lastTtfa = Date.now() - turnEndAt; showStats(tone); },
-      () => { setMode('idle', conversationMode ? 'listening again…' : ' '); if (conversationMode) setTimeout(startListening, 350); },
-    );
   } catch (e) {
     setMode('idle', ' ');
     addMsg('PENNY', 'Something went wrong: ' + e.message);
@@ -426,6 +587,7 @@ function sendTyped() {
   if (!t) return;
   textIn.value = '';
   turnEndAt = Date.now();
+  warmBridges();
   handleUtterance(t, null);
 }
 </script>

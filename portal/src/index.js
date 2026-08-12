@@ -69,7 +69,7 @@ function splitClauses(text, firstChunkMaxChars = 90) {
  * mood   = decayed session average { arousal, valence }
  * hour   = client local hour for whisper mode
  */
-function shapeReply(text, affect, prev, mood, hour) {
+function voiceParams(affect, prev, mood, hour) {
   const a = prev || affect || { arousal: 0.5, valence: 0.6, rate: 2.6, loudness: 0.5 };
   const calmMode = (affect && affect.valence < 0.35) || (mood && mood.valence < 0.3);
   const night = hour !== undefined && (hour >= 22 || hour < 6);
@@ -83,33 +83,42 @@ function shapeReply(text, affect, prev, mood, hour) {
   // agitation: calm mode caps at base pace and slows slightly (§5.3 floor)
   let userPace = a.rate ? Math.min(1.15, Math.max(0.85, a.rate / 2.8)) : 1.0;
   if (calmMode) userPace = Math.min(userPace, 1.0);
-  let baseRate = 1.0 * userPace;
-  if (calmMode) baseRate *= 0.93;
+  let baseRate = 1.06 * userPace; // slightly brisk base — she read as sluggish at 1.0
+  if (calmMode) baseRate *= 0.9;
   if (whisper) baseRate *= 0.95;
 
-  let basePitch = 1.0 + (energy - 0.5) * 0.25 - (calmMode ? 0.06 : 0);
-  const baseVolume = whisper ? 0.7 : 1.0;
-
-  const clauses = splitClauses(text);
-  const segments = clauses.map((clause, i) => {
-    const isQuestion = /\?\s*["']?$/.test(clause);
-    const isExclaim = /!\s*["']?$/.test(clause) && !calmMode;
-    const pivot = /^(honestly|look|okay|right|here's the thing|listen|now)\b/i.test(clause);
-    return {
-      text: clause,
-      rate: +(Math.min(1.2, Math.max(0.8, baseRate * (isExclaim ? 1.06 : 1))).toFixed(3)),
-      pitch: +(Math.min(1.4, Math.max(0.7, basePitch + (isQuestion ? 0.08 : 0) + (isExclaim ? 0.05 : 0))).toFixed(3)),
-      volume: +(Math.min(1, baseVolume * (isExclaim ? 1 : 0.97)).toFixed(3)),
-      pausePre: pivot && i > 0 ? 300 : 0,
-      pausePost: isQuestion ? 350 : /[,;—–]$/.test(clause) ? 160 : i < clauses.length - 1 ? 120 : 0,
-    };
-  });
-
+  const basePitch = 1.0 + (energy - 0.5) * 0.25 - (calmMode ? 0.06 : 0);
   return {
-    segments,
-    tone: calmMode ? 'calm' : energy > 0.7 ? 'bright' : 'warm',
+    baseRate, basePitch,
+    baseVolume: whisper ? 0.7 : 1.0,
+    calmMode, whisper,
     energy: +energy.toFixed(2),
-    whisper,
+    tone: calmMode ? 'calm' : energy > 0.7 ? 'bright' : 'warm',
+  };
+}
+
+function shapeClause(clause, i, isLast, p) {
+  const isQuestion = /\?\s*["']?$/.test(clause);
+  const isExclaim = /!\s*["']?$/.test(clause) && !p.calmMode;
+  const pivot = /^(honestly|look|okay|right|here's the thing|listen|now)\b/i.test(clause);
+  return {
+    text: clause,
+    rate: +(Math.min(1.25, Math.max(0.8, p.baseRate * (isExclaim ? 1.06 : 1))).toFixed(3)),
+    pitch: +(Math.min(1.4, Math.max(0.7, p.basePitch + (isQuestion ? 0.08 : 0) + (isExclaim ? 0.05 : 0))).toFixed(3)),
+    volume: +(Math.min(1, p.baseVolume * (isExclaim ? 1 : 0.97)).toFixed(3)),
+    pausePre: pivot && i > 0 ? 300 : 0,
+    pausePost: isQuestion ? 350 : /[,;—–]$/.test(clause) ? 160 : !isLast ? 120 : 0,
+  };
+}
+
+function shapeReply(text, affect, prev, mood, hour) {
+  const p = voiceParams(affect, prev, mood, hour);
+  const clauses = splitClauses(text);
+  return {
+    segments: clauses.map((c, i) => shapeClause(c, i, i === clauses.length - 1, p)),
+    tone: p.tone,
+    energy: p.energy,
+    whisper: p.whisper,
   };
 }
 
@@ -320,6 +329,98 @@ async function handleApi(request, env, url) {
     const convId = body.conversation_id || `web:${ts}`;
     await logTurn(env, convId, body.user || '', body.reply || '', ts);
     return json({ ok: true, conversation_id: convId });
+  }
+
+  // Server-side synthesis (Deepgram Aura on Workers AI): text → MP3 stream.
+  // athena = British female — Moneypenny's voice. ~400ms to first byte.
+  if (path === '/api/tts' && request.method === 'POST') {
+    const { text, speaker } = await request.json();
+    if (!text) return json({ error: 'text required' }, 400);
+    const out = await env.AI.run('@cf/deepgram/aura-1', {
+      text: String(text).slice(0, 800),
+      speaker: speaker || 'athena',
+    });
+    return new Response(out, { headers: { 'content-type': 'audio/mpeg' } });
+  }
+
+  // Streaming chat (spec §3): emits shaped prosody segments the moment each
+  // clause completes, so the client starts speaking while the model still writes.
+  if (path === '/api/chat-stream' && request.method === 'POST') {
+    const body = await request.json();
+    const history = (body.messages || []).slice(-20);
+    if (!history.length) return json({ error: 'messages required' }, 400);
+
+    const sys = [{ role: 'system', content: PERSONA }];
+    const aff = affectLine(body.affect, body.mood);
+    if (aff) sys.push({ role: 'system', content: aff });
+    if (body.cut_context) {
+      sys.push({ role: 'system', content: `Note: you were interrupted mid-sentence last turn at: "${String(body.cut_context).slice(0, 120)}". If they changed topic, drop it; otherwise briefly pick the thread back up.` });
+    }
+    const p = voiceParams(body.affect, body.prev_affect, body.mood, body.hour);
+
+    const aiStream = await env.AI.run(LLM, {
+      messages: [...sys, ...history],
+      max_tokens: 300,
+      temperature: 0.6,
+      stream: true,
+    });
+
+    const convId = body.conversation_id || `web:${Date.now()}`;
+    const encoder = new TextEncoder();
+    const send = (controller, obj) => controller.enqueue(encoder.encode('data: ' + JSON.stringify(obj) + '\n\n'));
+
+    const stream = new ReadableStream({
+      async start(controller) {
+        let buffer = '', full = '', segIndex = 0, sse = '';
+        const reader = aiStream.getReader();
+        const decoder = new TextDecoder();
+        const flushClauses = (final) => {
+          // emit every complete sentence in the buffer (plus remainder on final)
+          while (true) {
+            const m = buffer.match(/^[\s]*([^.!?…]+[.!?…]+["']?)/);
+            if (!m) break;
+            const clause = m[1].trim();
+            buffer = buffer.slice(m[0].length);
+            if (clause) send(controller, { segment: shapeClause(clause, segIndex++, false, p) });
+          }
+          if (final && buffer.trim()) {
+            send(controller, { segment: shapeClause(buffer.trim(), segIndex++, true, p) });
+            buffer = '';
+          }
+        };
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            sse += decoder.decode(value, { stream: true });
+            const lines = sse.split('\n');
+            sse = lines.pop() || '';
+            for (const line of lines) {
+              if (!line.startsWith('data: ')) continue;
+              const payload = line.slice(6).trim();
+              if (payload === '[DONE]') continue;
+              try {
+                const tok = JSON.parse(payload).response || '';
+                buffer += tok; full += tok;
+                flushClauses(false);
+              } catch (_) {}
+            }
+          }
+          flushClauses(true);
+          const reply = full.trim();
+          send(controller, { done: true, reply, tone: p.tone, energy: p.energy, whisper: p.whisper, conversation_id: convId });
+          const userText = history[history.length - 1].content;
+          await logTurn(env, convId, userText, reply, Date.now());
+        } catch (e) {
+          send(controller, { error: String(e) });
+        } finally {
+          controller.close();
+        }
+      },
+    });
+    return new Response(stream, {
+      headers: { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' },
+    });
   }
 
   // Cheap text recall for the browser app ("what did I say about X").

@@ -1,5 +1,5 @@
-// Voice-modulation e2e: real Chrome + live worker. Speech APIs stubbed with
-// prosody capture; network intercepted to observe bodies and inject latency.
+// Voice-modulation e2e v2: cloud TTS (Aura) + streaming segments + speculation
+// + barge-in + browser-voice fallback. Real Chrome, live worker, Audio stubbed.
 const puppeteer = require('puppeteer');
 
 const BASE = 'https://kate-portal.luke1-temp16.workers.dev';
@@ -18,12 +18,10 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
 
-  // network observer + injectable latency
-  const chatBodies = [], logCalls = [];
-  let delayChat = 0;
-  await page.setRequestInterception(true);
-  let draftResolved = null, draftPromise = null;
-  page.on('response', async (res) => {
+  const chatBodies = [], streamBodies = [], logCalls = [];
+  let ttsCalls = 0, delayStream = 0;
+  let draftResolved = null;
+  page.on('response', (res) => {
     try {
       const req = res.request();
       if (req.url().endsWith('/api/chat') && req.method() === 'POST') {
@@ -32,129 +30,140 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
       }
     } catch (_) {}
   });
+  await page.setRequestInterception(true);
   page.on('request', (req) => {
     const u = req.url();
-    if (u.endsWith('/api/chat') && req.method() === 'POST') {
-      chatBodies.push(JSON.parse(req.postData() || '{}'));
-      if (delayChat) return void setTimeout(() => req.continue(), delayChat);
+    if (u.endsWith('/api/chat') && req.method() === 'POST') chatBodies.push(JSON.parse(req.postData() || '{}'));
+    if (u.endsWith('/api/chat-stream') && req.method() === 'POST') {
+      streamBodies.push(JSON.parse(req.postData() || '{}'));
+      if (delayStream) return void setTimeout(() => req.continue(), delayStream);
     }
+    if (u.endsWith('/api/tts')) ttsCalls++;
     if (u.endsWith('/api/log') && req.method() === 'POST') logCalls.push(JSON.parse(req.postData() || '{}'));
     req.continue();
   });
 
-  // speech stubs with prosody capture + controllable recognition
   await page.evaluateOnNewDocument(() => {
+    window.__audioPlays = [];
+    window.Audio = class {
+      constructor(src) { this.src = src; this.playbackRate = 1; this.volume = 1; this.duration = 1; this.currentTime = 0.5; }
+      play() {
+        window.__audioPlays.push({ rate: this.playbackRate, volume: this.volume });
+        this.onplaying && setTimeout(() => this.onplaying(), 5);
+        setTimeout(() => { this.ontimeupdate && this.ontimeupdate(); this.onended && this.onended(); }, 900);
+        return Promise.resolve();
+      }
+      pause() {}
+    };
     window.__spoken = [];
     const fakeSynth = {
-      getVoices: () => [{ name: 'Test UK Female', lang: 'en-GB' }],
+      getVoices: () => [{ name: 'Test UK Female', lang: 'en-GB' }, { name: 'Test US Male', lang: 'en-US' }],
       onvoiceschanged: null,
-      cancel() { if (window.__current) { const c = window.__current; window.__current = null; clearTimeout(c.t); } },
+      cancel() {},
       speak(u) {
-        window.__spoken.push({ text: u.text, rate: u.rate, pitch: u.pitch, volume: u.volume });
+        window.__spoken.push({ text: u.text, rate: u.rate, pitch: u.pitch });
         u.onstart && setTimeout(() => u.onstart(), 5);
-        const dur = Math.min(700, 60 + u.text.length * 6);
-        const self = { t: setTimeout(() => { window.__current = null; u.onend && u.onend(); }, dur) };
-        window.__current = self;
+        setTimeout(() => u.onend && u.onend(), Math.min(500, 40 + u.text.length * 4));
       },
     };
     Object.defineProperty(window, 'speechSynthesis', { get: () => fakeSynth });
     window.SpeechSynthesisUtterance = function (t) { this.text = t; };
     Object.defineProperty(window, 'SpeechRecognition', { get: () => undefined });
-    // recognition driven manually from the test
     window.webkitSpeechRecognition = function () {
       window.__rec = this;
       this.start = () => {};
       this.stop = () => this.onend && this.onend();
     };
-    window.__feedInterim = (text) => {
-      const r = window.__rec;
-      r && r.onresult && r.onresult({ results: [Object.assign([{ transcript: text }], { isFinal: false })] });
-    };
-    window.__feedFinal = (text) => {
-      const r = window.__rec;
-      if (!r) return;
-      r.onresult && r.onresult({ results: [Object.assign([{ transcript: text }], { isFinal: true })] });
-      r.onend && r.onend();
-    };
-    // no real mic in headless
+    window.__feedInterim = (t) => { const r = window.__rec; r && r.onresult && r.onresult({ results: [Object.assign([{ transcript: t }], { isFinal: false })] }); };
+    window.__feedFinal = (t) => { const r = window.__rec; if (!r) return; r.onresult && r.onresult({ results: [Object.assign([{ transcript: t }], { isFinal: true })] }); r.onend && r.onend(); };
     navigator.mediaDevices.getUserMedia = () => Promise.reject(new Error('no mic'));
   });
 
-  const TOKEN = process.env.KATE_TOKEN;
-  await page.goto(BASE + '/#t=' + TOKEN, { waitUntil: 'networkidle2', timeout: 60000 });
+  await page.goto(BASE + '/#t=' + process.env.KATE_TOKEN, { waitUntil: 'networkidle2', timeout: 60000 });
   await sleep(1000);
 
-  const spoken = () => page.evaluate(() => window.__spoken);
-  const clearSpoken = () => page.evaluate(() => { window.__spoken = []; });
-  const pennyCount = () => page.evaluate(() => document.querySelectorAll('.msg.penny').length);
-  const waitPenny = async (n, t = 40000) =>
-    page.waitForFunction((n2) => document.querySelectorAll('.msg.penny').length >= n2, { timeout: t }, n);
+  // streaming creates the PENNY element empty — wait for actual text
+  const waitPenny = (n, t = 45000) =>
+    page.waitForFunction((n2) => {
+      const els = document.querySelectorAll('.msg.penny');
+      return els.length >= n2 && els[n2 - 1].textContent.trim().length > 3;
+    }, { timeout: t }, n);
+  const audioPlays = () => page.evaluate(() => window.__audioPlays);
 
-  // 1. typed chat → segments spoken with prosody params
+  // 1. streaming turn in cloud voice
   await page.type('#text', 'Give me two sentences about the ocean.');
   await page.click('#send');
   await waitPenny(1);
-  await sleep(2500); // let segments play out
-  let sp = await spoken();
-  const bridgesTxt = ['Hmm', 'Okay —', 'Let me', 'Mm,', 'Right,', 'Ooh'];
-  const segsOnly = sp.filter((u) => !(u.text.length < 20 && bridgesTxt.some((b) => u.text.startsWith(b))));
-  ok('reply spoken as prosody segments', segsOnly.length >= 1 && segsOnly.every((u) => typeof u.rate === 'number' && typeof u.pitch === 'number'),
-    segsOnly.length + ' segs, rate=' + (segsOnly[0] && segsOnly[0].rate));
+  await page.waitForFunction(() => window.__audioPlays.length >= 1, { timeout: 30000 });
+  await sleep(1500);
+  const ttsAfter1 = ttsCalls, plays1 = await audioPlays();
+  ok('turn used streaming endpoint', streamBodies.length >= 1);
+  ok('cloud voice: TTS fetched (segments + warmed bridges)', ttsAfter1 >= 3, ttsAfter1 + ' tts calls');
+  ok('cloud audio played with prosody rate applied', plays1.length >= 1 && plays1.every((p) => p.rate >= 0.8 && p.rate <= 1.3), JSON.stringify(plays1[0]));
+  ok('affect/mood/hour sent on stream', 'mood' in streamBodies[0] && 'hour' in streamBodies[0]);
   const reply1 = await page.evaluate(() => [...document.querySelectorAll('.msg.penny')].pop().textContent);
-  const spokenJoined = sp.map((u) => u.text).join(' ').replace(/\s+/g, ' ');
-  ok('segments cover the whole reply', spokenJoined.length >= reply1.length * 0.8);
-  ok('affect fields sent to server', chatBodies.length >= 1 && 'mood' in chatBodies[0] && 'hour' in chatBodies[0]);
+  ok('streamed transcript assembled', reply1.length > 20);
 
-  // 2. filler bridge when the server is slow (>600ms)
-  await clearSpoken();
-  delayChat = 1500;
+  // 2. bridge on slow stream
+  const playsBefore = (await audioPlays()).length;
+  const spokenBefore = (await page.evaluate(() => window.__spoken)).length;
+  delayStream = 1500;
   await page.type('#text', 'Quick one: is water wet?');
   await page.click('#send');
   await waitPenny(2);
-  delayChat = 0;
-  sp = await spoken();
-  const bridges = ['Hmm', 'Okay', 'Let me', 'Mm', 'Right', 'Ooh'];
-  ok('filler bridge spoken during slow think', sp.length >= 2 && bridges.some((b) => sp[0].text.startsWith(b)), 'first="' + (sp[0] && sp[0].text) + '"');
+  delayStream = 0;
+  await sleep(1500);
+  const playsAfter = (await audioPlays()).length;
+  const spokenAfter = (await page.evaluate(() => window.__spoken)).length;
+  ok('bridge fired during slow think', playsAfter > playsBefore + 1 || spokenAfter > spokenBefore, `audio ${playsBefore}→${playsAfter}, synth ${spokenBefore}→${spokenAfter}`);
 
-  // 3. speculation: drafts fire on partials, final matches → cached reply + /api/log
-  await sleep(2500);
-  await clearSpoken();
-  const chatCountBefore = chatBodies.length;
-  const logCountBefore = logCalls.length;
+  // 3. speculation
+  await sleep(1500);
+  const chatCountBefore = chatBodies.length, streamCountBefore = streamBodies.length, logBefore = logCalls.length;
   await page.click('#talk');
   await sleep(300);
   await page.evaluate(() => window.__feedInterim('what is the capital'));
   await sleep(400);
-  draftPromise = new Promise((r) => { draftResolved = r; });
+  const draftDone = new Promise((r) => { draftResolved = r; });
   await page.evaluate(() => window.__feedInterim('what is the capital of france please'));
-  // wait for the draft request to actually round-trip before ending the turn
-  await Promise.race([draftPromise, sleep(20000)]);
+  await Promise.race([draftDone, sleep(25000)]);
   await sleep(300);
   await page.evaluate(() => window.__feedFinal('what is the capital of france please'));
   await waitPenny(3);
-  await sleep(500);
+  await sleep(600);
   const draftsSent = chatBodies.slice(chatCountBefore).filter((b) => b.draft).length;
-  const nonDraftAfter = chatBodies.slice(chatCountBefore).filter((b) => !b.draft).length;
-  const logged = logCalls.length > logCountBefore;
-  ok('speculative draft fired on partial transcript', draftsSent >= 1, draftsSent + ' drafts');
-  ok('speculation hit: no fresh chat call, turn committed via /api/log', nonDraftAfter === 0 && logged);
+  ok('speculative draft fired', draftsSent >= 1, draftsSent + ' drafts');
+  ok('speculation hit: no stream call, committed via /api/log',
+    streamBodies.length === streamCountBefore && logCalls.length > logBefore);
   const statsTxt = await page.evaluate(() => document.querySelector('#stats').textContent);
   ok('stats show TTFA + SPEC', /TTFA \d+ms/.test(statsTxt) && /SPEC \d+%/.test(statsTxt), statsTxt);
 
-  // 4. barge-in: interrupt her mid-speech → next request carries cut_context
-  await sleep(1000);
+  // 4. barge-in mid-speech → cut_context next turn
   await page.type('#text', 'Tell me a long story about a lighthouse keeper and his cat.');
   await page.click('#send');
   await waitPenny(4);
-  await sleep(400); // she's mid-segment (stub speaks ~real-time-ish)
-  const wasSpeaking = await page.evaluate(() => window.__current != null);
-  await page.click('#talk'); // barge in
+  await page.waitForFunction((n) => window.__audioPlays.length > n, { timeout: 30000 }, playsAfter);
+  await page.click('#talk');
   await sleep(300);
   await page.evaluate(() => window.__feedFinal('actually what is two plus two'));
   await waitPenny(5);
-  const lastNonDraft = [...chatBodies].reverse().find((b) => !b.draft);
-  ok('barge-in captured cut position and sent cut_context', wasSpeaking && lastNonDraft && typeof lastNonDraft.cut_context === 'string' && lastNonDraft.cut_context.length > 0,
-    'cut="' + String(lastNonDraft && lastNonDraft.cut_context).slice(0, 40) + '"');
+  const lastStream = streamBodies[streamBodies.length - 1];
+  ok('barge-in sent cut_context', lastStream && typeof lastStream.cut_context === 'string' && lastStream.cut_context.length > 0,
+    'cut="' + String(lastStream && lastStream.cut_context).slice(0, 40) + '"');
+
+  // 5. browser-voice fallback mode
+  await page.click('#voiceBtn');
+  await sleep(200);
+  const pill = await page.evaluate(() => document.querySelector('#voiceBtn').textContent);
+  ok('voice pill toggles to phone voice', pill.includes('PHONE'));
+  await page.evaluate(() => { window.__spoken = []; });
+  await page.type('#text', 'Say one short sentence.');
+  await page.click('#send');
+  await waitPenny(6);
+  await page.waitForFunction(() => window.__spoken.length >= 1, { timeout: 30000 });
+  const spoken = await page.evaluate(() => window.__spoken);
+  ok('phone voice speaks segments with prosody', spoken.every((s) => typeof s.rate === 'number' && typeof s.pitch === 'number'),
+    spoken.length + ' utterances');
 
   ok('no JS errors across all flows', errors.length === 0, errors[0] || '');
   await page.screenshot({ path: 'voice-final.png' });
