@@ -92,7 +92,8 @@ class KateViewModel(app: Application) : AndroidViewModel(app) {
     fun setGroqApiKey(k: String) = viewModelScope.launch { settingsRepo.setGroqApiKey(k) }
     fun setPicovoiceAccessKey(k: String) = viewModelScope.launch { settingsRepo.setPicovoiceAccessKey(k) }
 
-    fun downloadModel(spec: ModelSpec) = viewModelScope.launch { modelManager.download(spec) }
+    fun downloadModel(spec: ModelSpec) =
+        tech.gonxt.kate.models.DownloadWorker.enqueue(getApplication(), spec)
     fun deleteModel(spec: ModelSpec) = modelManager.delete(spec)
     fun speakDirect(text: String) = engine.speakDirect(text)
 

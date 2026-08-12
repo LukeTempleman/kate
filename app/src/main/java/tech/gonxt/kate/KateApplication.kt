@@ -105,6 +105,17 @@ class KateApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         installCrashLogger()
+        // Corrupt model files abort the process natively during load (uncatchable);
+        // quarantining them here breaks the crash loop before anything loads.
+        val quarantined = modelManager.quarantineCrashedLoads()
+        if (quarantined.isNotEmpty()) {
+            runCatching {
+                crashFile().writeText(
+                    "A downloaded file for '${quarantined.joinToString()}' was corrupt and crashed the app. " +
+                        "It has been removed — please download it again from Setup.",
+                )
+            }
+        }
         SyncEngine.schedule(this)
     }
 

@@ -105,14 +105,24 @@ class TtsRouter(
             when (choice) {
                 TtsChoice.KOKORO -> withContext(Dispatchers.IO) {
                     val sid = if (s.voice == KateVoice.ISABELLA) KokoroSpeakers.BF_ISABELLA else KokoroSpeakers.BF_EMMA
-                    (kokoro ?: SherpaTts.kokoro(modelManager.path(Models.KOKORO), sid, player).also { kokoro = it })
+                    (kokoro ?: loadGuarded { SherpaTts.kokoro(modelManager.path(Models.KOKORO), sid, player) }.also { kokoro = it })
                         .also { it.speakerId = sid }
                 }
                 TtsChoice.PIPER -> withContext(Dispatchers.IO) {
-                    piper ?: SherpaTts.piper(modelManager.path(Models.PIPER), player).also { piper = it }
+                    piper ?: loadGuarded { SherpaTts.piper(modelManager.path(Models.PIPER), player) }.also { piper = it }
                 }
                 TtsChoice.DUMMY -> dummy
             }
+        }
+    }
+
+    /** Corrupt voice files SIGABRT natively; the guard quarantines them on next launch. */
+    private inline fun <T> loadGuarded(block: () -> T): T {
+        modelManager.beginLoadGuard("voice")
+        try {
+            return block()
+        } finally {
+            modelManager.endLoadGuard("voice")
         }
     }
 

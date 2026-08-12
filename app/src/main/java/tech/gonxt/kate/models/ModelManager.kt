@@ -171,24 +171,68 @@ class ModelManager(context: Context) {
     fun delete(spec: ModelSpec) {
         path(spec).deleteRecursively()
         doneMarker(spec).delete()
+        root.listFiles { f -> f.name.endsWith(".part") && f.name.contains(spec.id) }?.forEach { it.delete() }
         statuses.getValue(spec.id).value = ModelStatus.NotDownloaded
     }
 
     private fun doneMarker(spec: ModelSpec) = root.resolve("${spec.id}.done")
 
+    // ---- crash-loop guard -------------------------------------------------
+    // Native model loads (onnxruntime/MediaPipe) SIGABRT on corrupt files —
+    // uncatchable from Kotlin. A sentinel written before each load tells the
+    // NEXT launch that the previous load killed the app; the models involved
+    // get quarantined so the app starts clean and asks to re-download.
+
+    private fun guardFile(group: String) = root.resolve("loading-$group.guard")
+
+    fun beginLoadGuard(group: String) = guardFile(group).writeText(System.currentTimeMillis().toString())
+
+    fun endLoadGuard(group: String) { guardFile(group).delete() }
+
+    /** Call at app start. Returns groups whose last load crashed the process. */
+    fun quarantineCrashedLoads(): List<String> {
+        val crashed = mutableListOf<String>()
+        for ((group, specs) in GUARD_GROUPS) {
+            if (guardFile(group).exists()) {
+                crashed += group
+                guardFile(group).delete()
+                specs.forEach { spec ->
+                    path(spec).deleteRecursively()
+                    doneMarker(spec).delete()
+                    statuses[spec.id]?.value = ModelStatus.Failed("file was corrupt — download again")
+                }
+                android.util.Log.e("KateModels", "quarantined '$group' models after native crash during load")
+            }
+        }
+        return crashed
+    }
+
+    companion object {
+        val GUARD_GROUPS: Map<String, List<ModelSpec>> = mapOf(
+            "ears" to listOf(Models.WHISPER_SMALL_EN, Models.SILERO_VAD, Models.KWS_ZIPFORMER),
+            "voice" to listOf(Models.KOKORO, Models.PIPER),
+            "brain" to listOf(Models.LLM_PRIMARY, Models.LLM_FALLBACK),
+        )
+    }
+
     private fun fetch(url: String, target: File, onProgress: (Float) -> Unit) {
         val tmp = File(target.parentFile, target.name + ".part")
+        val already = if (tmp.exists()) tmp.length() else 0L
         val conn = URL(url).openConnection() as HttpURLConnection
         conn.connectTimeout = 30_000
         conn.readTimeout = 60_000
         conn.instanceFollowRedirects = true
+        if (already > 0) conn.setRequestProperty("Range", "bytes=$already-")
         try {
-            val total = conn.contentLengthLong
+            // 206 = resuming a previous partial download; anything else restarts.
+            val resuming = conn.responseCode == 206
+            val offset = if (resuming) already else 0L
+            val total = offset + conn.contentLengthLong.coerceAtLeast(0)
             conn.inputStream.use { input ->
-                tmp.outputStream().use { out ->
+                java.io.FileOutputStream(tmp, resuming).use { out ->
                     val buf = ByteArray(256 * 1024)
                     var read: Int
-                    var done = 0L
+                    var done = offset
                     while (input.read(buf).also { read = it } != -1) {
                         out.write(buf, 0, read)
                         done += read
@@ -196,10 +240,15 @@ class ModelManager(context: Context) {
                     }
                 }
             }
+            // A dropped connection can end the stream without an exception; a
+            // truncated model would SIGABRT the native engine at load time.
+            if (total > 0 && tmp.length() < total) {
+                error("incomplete: ${tmp.length()}/$total bytes")
+            }
             if (!tmp.renameTo(target)) error("rename failed for ${target.name}")
         } finally {
+            // .part is kept on failure so the next attempt resumes.
             conn.disconnect()
-            tmp.delete()
         }
     }
 

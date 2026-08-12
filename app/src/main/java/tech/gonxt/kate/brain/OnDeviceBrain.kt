@@ -63,13 +63,18 @@ class OnDeviceBrain(
 
     private suspend fun load(): LlmInference = loadMutex.withLock {
         llm ?: withContext(Dispatchers.IO) {
-            LlmInference.createFromOptions(
-                context,
-                LlmInference.LlmInferenceOptions.builder()
-                    .setModelPath(modelManager.path(spec).absolutePath)
-                    .setMaxTokens(1024)
-                    .build(),
-            ).also { llm = it }
+            modelManager.beginLoadGuard("brain")
+            try {
+                LlmInference.createFromOptions(
+                    context,
+                    LlmInference.LlmInferenceOptions.builder()
+                        .setModelPath(modelManager.path(spec).absolutePath)
+                        .setMaxTokens(1024)
+                        .build(),
+                ).also { llm = it }
+            } finally {
+                modelManager.endLoadGuard("brain")
+            }
         }
     }
 

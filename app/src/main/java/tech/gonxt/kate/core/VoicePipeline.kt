@@ -64,41 +64,49 @@ class VoicePipeline(
         _status.value = "ears off"
     }
 
+    @Volatile
+    private var captureOnReady = false
+
     /** TALK button: skip the wake word and capture immediately. */
     fun tapToTalk() {
-        if (loopJob?.isActive == true) {
+        if (loopJob?.isActive == true && _mode.value != Mode.OFF) {
             engine.bargeIn()
             engine.beginListening()
             _mode.value = Mode.CAPTURE
         } else {
+            // Loop still loading models: capture as soon as it's up.
+            captureOnReady = true
             start(wake = wakeEnabled)
-            scope.launch {
-                if (loopJob?.isActive == true) {
-                    engine.beginListening()
-                    _mode.value = Mode.CAPTURE
-                }
-            }
         }
     }
 
     private suspend fun runLoop() {
         _status.value = "loading ear models…"
         val (wake, stt) = try {
+            modelManager.beginLoadGuard("ears") // a native abort here is caught on next launch
             withContext(Dispatchers.IO) {
                 SherpaWake(modelManager.path(Models.KWS_ZIPFORMER)) to
                     SherpaStt(
                         whisperDir = modelManager.path(Models.WHISPER_SMALL_EN),
                         vadModel = modelManager.path(Models.SILERO_VAD),
                     )
-            }
+            }.also { modelManager.endLoadGuard("ears") }
         } catch (e: Exception) {
+            modelManager.endLoadGuard("ears")
             android.util.Log.e("KatePipeline", "ear model load failed", e)
             _status.value = "ears failed: ${e.message?.take(60)}"
             _mode.value = Mode.OFF
             return
         }
-        _mode.value = Mode.WAKE
-        _status.value = "say “Moneypenny”"
+        if (captureOnReady) {
+            captureOnReady = false
+            engine.beginListening()
+            _mode.value = Mode.CAPTURE
+            _status.value = "listening"
+        } else {
+            _mode.value = Mode.WAKE
+            _status.value = "say “Moneypenny”"
+        }
         try {
             mic.frames().collect { frame ->
                 when (_mode.value) {
