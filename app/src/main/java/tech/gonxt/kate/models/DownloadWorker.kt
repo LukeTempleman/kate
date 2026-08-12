@@ -41,11 +41,11 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
     private fun foregroundInfo(spec: ModelSpec): ForegroundInfo {
         val nm = applicationContext.getSystemService(NotificationManager::class.java)
         nm?.createNotificationChannel(
-            NotificationChannel(CHANNEL_ID, "Moneypenny downloads", NotificationManager.IMPORTANCE_LOW),
+            NotificationChannel(CHANNEL_ID, "Athena downloads", NotificationManager.IMPORTANCE_LOW),
         )
         val n = Notification.Builder(applicationContext, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
-            .setContentTitle("Moneypenny is downloading")
+            .setContentTitle("Athena is downloading")
             .setContentText("${spec.displayName} · ~${spec.approxMB} MB")
             .setOngoing(true)
             .build()

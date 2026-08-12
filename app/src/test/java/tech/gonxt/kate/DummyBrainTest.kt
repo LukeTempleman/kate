@@ -24,6 +24,6 @@ class DummyBrainTest {
     fun `identity prompt mentions kate`() = runTest {
         val brain = DummyBrain(tokenDelayMs = 0)
         val text = brain.reply(listOf(ChatMessage(1, Role.USER, "who are you?"))).toList().joinToString("")
-        assertTrue(text.contains("Moneypenny"))
+        assertTrue(text.contains("Athena"))
     }
 }

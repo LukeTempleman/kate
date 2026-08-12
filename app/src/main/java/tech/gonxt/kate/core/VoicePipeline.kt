@@ -105,7 +105,7 @@ class VoicePipeline(
             _status.value = "listening"
         } else {
             _mode.value = Mode.WAKE
-            _status.value = "say “Moneypenny”"
+            _status.value = "say “Athena”"
         }
         try {
             mic.frames().collect { frame ->
@@ -127,7 +127,7 @@ class VoicePipeline(
                                 is SherpaStt.Event.Partial -> engine.updatePartial(event.text)
                                 is SherpaStt.Event.Final -> {
                                     _mode.value = Mode.WAKE
-                                    _status.value = "say “Moneypenny”"
+                                    _status.value = "say “Athena”"
                                     engine.submitUtterance(event.text)
                                 }
                             }

@@ -11,7 +11,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
-// Moneypenny design system v2: warm near-black base, soft red accent,
+// Athena design system v2: warm near-black base, soft red accent,
 // rounded geometry, mono display type. (Names kept from the cyan era so the
 // accent swap stays a one-file change.)
 object KateColors {

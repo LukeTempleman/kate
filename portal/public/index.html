@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>MONEYPENNY</title>
+<title>ATHENA</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><circle cx=%2250%22 cy=%2250%22 r=%2232%22 fill=%22none%22 stroke=%22%23FF6B7A%22 stroke-width=%224%22/><circle cx=%2250%22 cy=%2250%22 r=%229%22 fill=%22%23FF6B7A%22/></svg>">
 <style>
   :root { --base:#0D0709; --surface:#161014; --line:#2E2226; --red:#FF6B7A; --red-dim:#9E4552;
@@ -40,7 +40,7 @@
 </head>
 <body>
 <header>
-  <h1>MONEYPENNY</h1>
+  <h1>ATHENA</h1>
   <span class="pill" id="convBtn">AUTO-LISTEN</span>
   <span class="pill on" id="voiceBtn">VOICE·HER</span>
   <span class="pill" id="speakerBtn">♀ ATHENA</span>
@@ -69,7 +69,7 @@ const statusEl = $('#status'), statsEl = $('#stats'), logEl = $('#log'), talkBtn
 })();
 function token() {
   let t = localStorage.getItem('kate_token');
-  if (!t) { t = prompt('Paste your Moneypenny key (one time):') || ''; localStorage.setItem('kate_token', t); }
+  if (!t) { t = prompt('Paste your Athena key (one time):') || ''; localStorage.setItem('kate_token', t); }
   return t;
 }
 async function api(path, body, signal) {
@@ -129,9 +129,9 @@ drawOrb();
 function setMode(m, msg) { mode = m; if (msg !== undefined) statusEl.textContent = msg; }
 
 function addMsg(who, text) {
-  const w = document.createElement('div'); w.className = 'who ' + (who === 'PENNY' ? 'penny' : '');
+  const w = document.createElement('div'); w.className = 'who ' + (who === 'ATHENA' ? 'penny' : '');
   w.textContent = who;
-  const d = document.createElement('div'); d.className = 'msg ' + (who === 'PENNY' ? 'penny' : 'you');
+  const d = document.createElement('div'); d.className = 'msg ' + (who === 'ATHENA' ? 'penny' : 'you');
   d.textContent = text;
   logEl.append(w, d); logEl.scrollTop = logEl.scrollHeight;
   return d;
@@ -671,7 +671,7 @@ async function handleUtterance(text, affect) {
   try {
     let reply, tone = null, speculativeHit = false;
     const rm = text.match(RECALL);
-    if (rm || /^(?:moneypenny[,;]?\s*)?(?:forget|pin) (?:that|it|this)\.?$/i.test(text)) {
+    if (rm || /^(?:(?:athena|moneypenny)[,;]?\s*)?(?:forget|pin) (?:that|it|this)\.?$/i.test(text)) {
       if (rm) {
         const q = (rm[1] || rm[2]).trim();
         const hits = await api('/api/recall', { query: q });
@@ -683,7 +683,7 @@ async function handleUtterance(text, affect) {
       } else {
         reply = (await api('/api/pin-last', {})).pinned ? "Pinned. I'll keep that permanently." : 'There was nothing recent to pin.';
       }
-      addMsg('PENNY', reply);
+      addMsg('ATHENA', reply);
       beginSpeaking(null);
       player.enqueue({ text: reply, rate: 1.0, pitch: 1, volume: 1 });
       player.finish();
@@ -694,7 +694,7 @@ async function handleUtterance(text, affect) {
         reply = cached.reply || '…';
         tone = cached.tone;
         api('/api/log', { user: text, reply, conversation_id: conversationId }).then((res) => { conversationId = conversationId || res.conversation_id; }).catch(() => {});
-        addMsg('PENNY', reply);
+        addMsg('ATHENA', reply);
         beginSpeaking(tone);
         for (const seg of cached.segments || [{ text: reply, rate: 1.0, pitch: 1, volume: 1 }]) player.enqueue(seg);
         player.finish();
@@ -702,7 +702,7 @@ async function handleUtterance(text, affect) {
         const body = chatBody(text);
         body.affect = affect;
         const bridgeTimer = setTimeout(speakBridge, 600);
-        const pennyEl = addMsg('PENNY', '');
+        const pennyEl = addMsg('ATHENA', '');
         beginSpeaking(null);
         let result;
         try {
@@ -732,7 +732,7 @@ async function handleUtterance(text, affect) {
     updateMood(affect);
   } catch (e) {
     setMode('idle', ' ');
-    addMsg('PENNY', 'Something went wrong: ' + e.message);
+    addMsg('ATHENA', 'Something went wrong: ' + e.message);
   }
 }
 

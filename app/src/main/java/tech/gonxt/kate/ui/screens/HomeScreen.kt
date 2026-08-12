@@ -72,7 +72,7 @@ fun HomeScreen(
                 .padding(top = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("MONEYPENNY", style = MaterialTheme.typography.titleLarge, color = KateColors.Cyan)
+            Text("ATHENA", style = MaterialTheme.typography.titleLarge, color = KateColors.Cyan)
             Spacer(Modifier.width(12.dp))
             Column {
                 Text(
@@ -177,7 +177,7 @@ private fun TranscriptRow(msg: ChatMessage) {
     val isKate = msg.role == Role.KATE
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(
-            if (isKate) "PENNY" else "YOU",
+            if (isKate) "ATHENA" else "YOU",
             style = MaterialTheme.typography.labelSmall,
             color = if (isKate) KateColors.CyanDim else KateColors.TextDim,
         )
@@ -210,7 +210,7 @@ private fun InputBar(onSend: (String) -> Unit, onTalk: () -> Unit) {
         OutlinedTextField(
             value = text,
             onValueChange = { text = it },
-            placeholder = { Text("type to moneypenny…", color = KateColors.TextDim) },
+            placeholder = { Text("type to athena…", color = KateColors.TextDim) },
             singleLine = true,
             modifier = Modifier.weight(1f),
             colors = OutlinedTextFieldDefaults.colors(

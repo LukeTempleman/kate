@@ -47,7 +47,7 @@ class KateViewModel(app: Application) : AndroidViewModel(app) {
     val drivingMode = MutableStateFlow(false)
 
     private val demoUtterances = listOf(
-        "Moneypenny, are you there?",
+        "Athena, are you there?",
         "What can you do so far?",
         "Tell me about your voice.",
         "Who are you?",

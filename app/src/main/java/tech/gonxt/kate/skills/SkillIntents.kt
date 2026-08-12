@@ -10,13 +10,13 @@ object SkillIntents {
     }
 
     private val RUN = listOf(
-        Regex("^(?:(?:kate|moneypenny)[,;]?\\s*)?run (?:the )?(.+?)(?: (?:on|about|for) (.+?))?\\.?$", RegexOption.IGNORE_CASE),
-        Regex("^(?:(?:kate|moneypenny)[,;]?\\s*)?(?:start|launch) (?:the )?(.+?) (?:skill|bot)(?: (?:on|about|for) (.+?))?\\.?$", RegexOption.IGNORE_CASE),
+        Regex("^(?:(?:kate|athena)[,;]?\\s*)?run (?:the )?(.+?)(?: (?:on|about|for) (.+?))?\\.?$", RegexOption.IGNORE_CASE),
+        Regex("^(?:(?:kate|athena)[,;]?\\s*)?(?:start|launch) (?:the )?(.+?) (?:skill|bot)(?: (?:on|about|for) (.+?))?\\.?$", RegexOption.IGNORE_CASE),
     )
 
     private val CREATE = listOf(
-        Regex("^(?:(?:kate|moneypenny)[,;]?\\s*)?(?:build|create|make) (?:me )?a (?:new )?skill (?:that |which |to |called )?(.+)$", RegexOption.IGNORE_CASE),
-        Regex("^(?:(?:kate|moneypenny)[,;]?\\s*)?build me (?:a |an )?(.+? bot .+)$", RegexOption.IGNORE_CASE),
+        Regex("^(?:(?:kate|athena)[,;]?\\s*)?(?:build|create|make) (?:me )?a (?:new )?skill (?:that |which |to |called )?(.+)$", RegexOption.IGNORE_CASE),
+        Regex("^(?:(?:kate|athena)[,;]?\\s*)?build me (?:a |an )?(.+? bot .+)$", RegexOption.IGNORE_CASE),
     )
 
     fun classify(text: String): Intent {

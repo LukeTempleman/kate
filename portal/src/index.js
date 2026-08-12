@@ -187,6 +187,64 @@ async function applyEvent(env, ev, origin) {
   return true;
 }
 
+const STOPWORDS = new Set(['the','a','an','and','or','but','if','then','so','of','to','in','on','at','for','with','about','into','over','after','before','is','are','was','were','be','been','have','has','had','do','does','did','will','would','can','could','should','shall','may','might','must','i','you','he','she','it','we','they','me','him','her','us','them','my','your','his','its','our','their','this','that','these','those','what','which','who','whom','when','where','why','how','not','no','yes','please','athena','moneypenny','kate','hey','okay','just','really','very','some','any','tell','know','think','want','like','get','make','going','there','here','from','was','what','something','anything']);
+
+function extractTopics(text) {
+  const entities = [...new Set((text.match(/\b[A-Z][a-z]{2,}(?:\s+[A-Z][a-z]{2,})*\b/g) || [])
+    .filter((e) => !STOPWORDS.has(e.toLowerCase())))].slice(0, 4);
+  const entityWords = new Set(entities.flatMap((e) => e.toLowerCase().split(/\s+/)));
+  const counts = {};
+  for (const w of text.toLowerCase().match(/[a-z]{4,}/g) || []) {
+    if (!STOPWORDS.has(w) && !entityWords.has(w)) counts[w] = (counts[w] || 0) + 1;
+  }
+  const topics = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([w]) => w);
+  return { topics, entities };
+}
+
+// The Obsidian tree: every web turn links its memory into topic/entity nodes so
+// the dashboard graph grows from browser conversations too.
+async function growGraph(env, memId, userText) {
+  const { topics, entities } = extractTopics(userText);
+  const link = async (kind, label) => {
+    const nodeId = `web:${kind}:${label.toLowerCase()}`;
+    await env.DB.prepare(
+      `INSERT INTO graph_nodes (id, kind, label) VALUES (?,?,?) ON CONFLICT(id) DO NOTHING`,
+    ).bind(nodeId, kind, label).run();
+    await env.DB.prepare(
+      `INSERT INTO graph_edges (id, from_node, to_node, relation, weight) VALUES (?,?,?,?,1)
+       ON CONFLICT(id) DO UPDATE SET weight = weight + 1`,
+    ).bind(`web:e:${memId}:${label.toLowerCase()}`, memId, nodeId, kind === 'topic' ? 'about' : 'mentions').run();
+  };
+  for (const t of topics) await link('topic', t);
+  for (const e of entities) await link('entity', e);
+}
+
+// Keyword-triggered recall (user's request): when today's words touch topics
+// from earlier conversations, hand her those memories so she stays aligned —
+// without being asked.
+async function relevantMemories(env, userText, limit = 4) {
+  const { topics, entities } = extractTopics(userText);
+  const words = [...entities.map((e) => e.toLowerCase()), ...topics].slice(0, 5);
+  if (!words.length) return [];
+  const like = words.map(() => `(CASE WHEN lower(content) LIKE ? THEN 1 ELSE 0 END)`).join(' + ');
+  const rows = await env.DB.prepare(
+    `SELECT content, created_at, pinned, (${like}) AS score FROM memories
+     WHERE deleted = 0 ORDER BY score DESC, pinned DESC, created_at DESC LIMIT ${limit + 4}`,
+  ).bind(...words.map((w) => `%${w}%`)).all();
+  return rows.results
+    .filter((r) => r.score > 0 && r.content.toLowerCase() !== userText.toLowerCase())
+    .slice(0, limit);
+}
+
+function memoryContext(mems) {
+  if (!mems.length) return null;
+  const lines = mems.map((m) => {
+    const d = new Date(m.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+    return `- (${d}${m.pinned ? ', pinned' : ''}) "${m.content.slice(0, 160)}"`;
+  });
+  return `Things the user said in earlier conversations that relate to this turn — use them for continuity, reference them naturally if helpful, never recite them all:\n${lines.join('\n')}`;
+}
+
 async function logTurn(env, convId, userText, reply, ts) {
   await env.DB.prepare(
     `INSERT OR IGNORE INTO conversations (id, started_at, context, device) VALUES (?,?,?,?)`,
@@ -200,6 +258,7 @@ async function logTurn(env, convId, userText, reply, ts) {
   await env.DB.prepare(
     `INSERT INTO memories (id, type, content, pinned, deleted, created_at) VALUES (?,?,?,0,0,?)`,
   ).bind(`web:${ts}:m`, 'utterance', userText, ts).run();
+  await growGraph(env, `web:${ts}:m`, userText);
 }
 
 async function runLlm(env, prompt, maxTokens = 1024) {
@@ -302,6 +361,8 @@ async function handleApi(request, env, url) {
     if (body.cut_context) {
       sys.push({ role: 'system', content: `Note: you were interrupted mid-sentence last turn at: "${String(body.cut_context).slice(0, 120)}". If they changed topic, drop it; otherwise briefly pick the thread back up.` });
     }
+    const mem = memoryContext(await relevantMemories(env, history[history.length - 1].content));
+    if (mem) sys.push({ role: 'system', content: mem });
 
     const out = await env.AI.run(LLM, {
       messages: [...sys, ...history],
@@ -357,6 +418,8 @@ async function handleApi(request, env, url) {
     if (body.cut_context) {
       sys.push({ role: 'system', content: `Note: you were interrupted mid-sentence last turn at: "${String(body.cut_context).slice(0, 120)}". If they changed topic, drop it; otherwise briefly pick the thread back up.` });
     }
+    const mem = memoryContext(await relevantMemories(env, history[history.length - 1].content));
+    if (mem) sys.push({ role: 'system', content: mem });
     const p = voiceParams(body.affect, body.prev_affect, body.mood, body.hour);
 
     const aiStream = await env.AI.run(LLM, {

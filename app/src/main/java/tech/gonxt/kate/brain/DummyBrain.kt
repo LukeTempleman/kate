@@ -29,11 +29,11 @@ class DummyBrain(private val tokenDelayMs: Long = 40) : Brain {
         val p = prompt.lowercase()
         return when {
             "hello" in p || "hi " in p || p == "hi" ->
-                "Hello. Moneypenny here — what do you need?"
+                "Hello. Athena here — what do you need?"
             "weather" in p ->
                 "I can't check live weather yet. That arrives when my online brain is wired in shortly."
             "who are you" in p || "your name" in p ->
-                "I'm Moneypenny, your personal assistant. Right now I'm running on a placeholder brain while my voice and ears are tuned."
+                "I'm Athena, your personal assistant. Right now I'm running on a placeholder brain while my voice and ears are tuned."
             "time" in p ->
                 "My clock capability lands in a later iteration. For now, your dashboard knows best."
             else -> CANNED[prompt.hashCode().absoluteValue % CANNED.size]

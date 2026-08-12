@@ -52,7 +52,7 @@ fun SetupScreen(vm: KateViewModel, onDone: () -> Unit) {
             Orb(state = OrbState.IDLE, amplitude = 0f, modifier = Modifier.size(120.dp))
         }
         Text(
-            "Let's set up Moneypenny",
+            "Let's set up Athena",
             style = MaterialTheme.typography.titleLarge,
             color = KateColors.Cyan,
             modifier = Modifier.fillMaxWidth(),
@@ -73,7 +73,7 @@ fun SetupScreen(vm: KateViewModel, onDone: () -> Unit) {
 
         SetupCard(
             step = "2 · HER EARS",
-            blurb = "So you can just say “Moneypenny” and talk. About 650 MB — Wi-Fi recommended.",
+            blurb = "So you can just say “Athena” and talk. About 650 MB — Wi-Fi recommended.",
             specs = listOf(Models.KWS_ZIPFORMER, Models.SILERO_VAD, Models.WHISPER_SMALL_EN),
             vm = vm,
             buttonLabel = "GET HER EARS",
