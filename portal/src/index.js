@@ -25,6 +25,10 @@ const COLUMNS = {
 
 const LLM = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
 
+const PERSONA = `You are Moneypenny, the user's warm, concise British personal assistant, speaking aloud. You are their assistant — do not claim to work for anyone else.
+Keep spoken turns short — one to three sentences. Never use markdown, lists, or emoji: you are heard, not read.
+If an answer is genuinely long, give a one-sentence spoken summary and offer to save the detail for later.`;
+
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
@@ -162,6 +166,70 @@ async function handleApi(request, env, url) {
     if (!key) return json({ error: 'key required' }, 400);
     await env.ARTIFACTS.put(key, request.body);
     return json({ ok: true, key });
+  }
+
+  // Browser Moneypenny: one endpoint per turn — answers with Workers AI and
+  // logs the exchange into the same D1 tables the phone syncs to.
+  if (path === '/api/chat' && request.method === 'POST') {
+    const body = await request.json();
+    const history = (body.messages || []).slice(-20);
+    if (!history.length) return json({ error: 'messages required' }, 400);
+    const out = await env.AI.run(LLM, {
+      messages: [{ role: 'system', content: PERSONA }, ...history],
+      max_tokens: 400,
+      temperature: 0.6,
+    });
+    const reply = (out.response || '').trim();
+
+    const ts = Date.now();
+    const convId = body.conversation_id || `web:${ts}`;
+    const userText = history[history.length - 1].content;
+    await env.DB.prepare(
+      `INSERT OR IGNORE INTO conversations (id, started_at, context, device) VALUES (?,?,?,?)`,
+    ).bind(convId, ts, 'browser', 'web').run();
+    await env.DB.prepare(
+      `INSERT INTO turns (id, conversation_id, role, text, model_used, created_at) VALUES (?,?,?,?,?,?)`,
+    ).bind(`web:${ts}:u`, convId, 'user', userText, null, ts).run();
+    await env.DB.prepare(
+      `INSERT INTO turns (id, conversation_id, role, text, model_used, created_at) VALUES (?,?,?,?,?,?)`,
+    ).bind(`web:${ts}:k`, convId, 'kate', reply, 'workers-ai', ts).run();
+    await env.DB.prepare(
+      `INSERT INTO memories (id, type, content, pinned, deleted, created_at) VALUES (?,?,?,0,0,?)`,
+    ).bind(`web:${ts}:m`, 'utterance', userText, ts).run();
+
+    return json({ reply, conversation_id: convId });
+  }
+
+  // Cheap text recall for the browser app ("what did I say about X").
+  if (path === '/api/recall' && request.method === 'POST') {
+    const { query } = await request.json();
+    const words = String(query || '').toLowerCase().split(/\s+/)
+      .filter((w) => w.length > 3).slice(0, 4);
+    if (!words.length) return json([]);
+    const like = words.map(() => `(CASE WHEN lower(content) LIKE ? THEN 1 ELSE 0 END)`).join(' + ');
+    const rows = await env.DB.prepare(
+      `SELECT content, created_at, (${like}) AS score FROM memories
+       WHERE deleted = 0 ORDER BY score DESC, created_at DESC LIMIT 5`,
+    ).bind(...words.map((w) => `%${w}%`)).all();
+    return json(rows.results.filter((r) => r.score > 0));
+  }
+
+  if (path === '/api/forget-last' && request.method === 'POST') {
+    const last = await env.DB.prepare(
+      `SELECT id FROM memories WHERE deleted = 0 ORDER BY created_at DESC LIMIT 1`,
+    ).first();
+    if (!last) return json({ forgotten: false });
+    await env.DB.prepare(`UPDATE memories SET deleted = 1 WHERE id = ?`).bind(last.id).run();
+    return json({ forgotten: true });
+  }
+
+  if (path === '/api/pin-last' && request.method === 'POST') {
+    const last = await env.DB.prepare(
+      `SELECT id FROM memories WHERE deleted = 0 ORDER BY created_at DESC LIMIT 1`,
+    ).first();
+    if (!last) return json({ pinned: false });
+    await env.DB.prepare(`UPDATE memories SET pinned = 1 WHERE id = ?`).bind(last.id).run();
+    return json({ pinned: true });
   }
 
   // Heavy AI: the phone offloads `llm` / `research` skill steps here (spec §2.5).

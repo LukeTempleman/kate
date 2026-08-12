@@ -2,181 +2,235 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>MONEYPENNY — portal</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>MONEYPENNY</title>
 <style>
-  :root { --base:#050A0D; --surface:#0A1116; --line:#17262E; --cyan:#00E5FF; --cyan-dim:#0E7A8A;
-          --text:#D9F6FB; --dim:#6E8C96; --danger:#FF5470; }
-  * { box-sizing:border-box; margin:0; }
+  :root { --base:#0D0709; --surface:#161014; --line:#2E2226; --red:#FF6B7A; --red-dim:#9E4552;
+          --text:#F7E9EB; --dim:#9C8A8E; }
+  * { box-sizing:border-box; margin:0; -webkit-tap-highlight-color:transparent; }
   body { background:var(--base); color:var(--text); font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
-         min-height:100dvh; padding:20px; }
-  header { display:flex; align-items:center; gap:16px; margin-bottom:18px; flex-wrap:wrap; }
-  h1 { color:var(--cyan); font-weight:300; letter-spacing:.4em; font-size:1.4rem; }
-  nav { display:flex; gap:8px; flex-wrap:wrap; }
-  nav button, .btn { background:none; border:1px solid var(--line); color:var(--dim); padding:8px 14px;
-         border-radius:6px; font:inherit; font-size:.72rem; letter-spacing:.15em; cursor:pointer; }
-  nav button.active { border-color:var(--cyan); color:var(--cyan); }
-  main { max-width:1200px; }
-  .cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:12px; }
-  .card { background:var(--surface); border-radius:8px; padding:16px; }
-  .card .num { color:var(--cyan); font-size:2rem; font-weight:300; }
-  .card .lbl { color:var(--dim); font-size:.7rem; letter-spacing:.15em; margin-top:4px; }
-  .row { background:var(--surface); border-radius:8px; padding:12px 14px; margin-bottom:10px; }
-  .row .meta { color:var(--dim); font-size:.72rem; margin-top:6px; }
-  .status-done { color:var(--cyan); } .status-failed { color:var(--danger); } .status-other { color:var(--dim); }
-  #graph { width:100%; height:70vh; background:var(--surface); border-radius:10px; touch-action:none; }
-  .muted { color:var(--dim); font-size:.85rem; padding:20px 0; }
-  pre { white-space:pre-wrap; font-size:.8rem; line-height:1.5; }
-  a { color:var(--cyan); }
+         height:100dvh; display:flex; flex-direction:column; overflow:hidden; }
+  header { display:flex; align-items:center; gap:10px; padding:14px 18px; }
+  h1 { color:var(--red); font-weight:500; letter-spacing:.15em; font-size:1.05rem; }
+  .pill { font-size:.6rem; letter-spacing:.12em; color:var(--dim); border:1px solid var(--line);
+          border-radius:999px; padding:4px 10px; }
+  #convBtn.on { color:var(--red); border-color:var(--red); }
+  #orbWrap { display:flex; justify-content:center; padding:6px 0 0; }
+  canvas#orb { width:190px; height:190px; }
+  #status { text-align:center; color:var(--dim); font-size:.8rem; min-height:1.4em; padding:4px 16px; }
+  #log { flex:1; overflow-y:auto; padding:8px 20px 12px; }
+  .who { font-size:.62rem; letter-spacing:.15em; color:var(--dim); margin-top:12px; }
+  .who.penny { color:var(--red-dim); }
+  .msg { font-size:1rem; line-height:1.55; }
+  .msg.penny { color:var(--text); }
+  .msg.you { color:var(--dim); }
+  footer { display:flex; gap:10px; padding:12px 16px calc(14px + env(safe-area-inset-bottom)); }
+  #talk { flex:0 0 auto; min-width:112px; height:58px; border-radius:20px; border:1.5px solid var(--red);
+          background:none; color:var(--red); font:inherit; font-size:.95rem; letter-spacing:.15em; }
+  #talk.listening { background:var(--red); color:var(--base); }
+  #talk:disabled { opacity:.4; }
+  #text { flex:1; height:58px; border-radius:20px; border:1px solid var(--line); background:var(--surface);
+          color:var(--text); font:inherit; padding:0 16px; font-size:.95rem; }
+  #text:focus { outline:none; border-color:var(--red-dim); }
+  #send { flex:0 0 auto; width:58px; height:58px; border-radius:20px; border:1px solid var(--line);
+          background:none; color:var(--red); font-size:1.3rem; }
 </style>
 </head>
 <body>
 <header>
   <h1>MONEYPENNY</h1>
-  <nav id="nav"></nav>
-  <button class="btn" id="tokenBtn" style="margin-left:auto">TOKEN</button>
+  <span class="pill" id="brainPill">BRAIN·CLOUD</span>
+  <span class="pill" id="convBtn">AUTO-LISTEN</span>
+  <span class="pill" style="margin-left:auto"><a href="/dashboard" style="color:inherit;text-decoration:none">DASH</a></span>
 </header>
-<main id="main"><div class="muted">loading…</div></main>
+<div id="orbWrap"><canvas id="orb" width="380" height="380"></canvas></div>
+<div id="status">tap TALK and speak</div>
+<div id="log"></div>
+<footer>
+  <button id="talk">TALK</button>
+  <input id="text" placeholder="or type to her…" autocomplete="off">
+  <button id="send">➤</button>
+</footer>
 <script>
-const TABS = ['OVERVIEW','GRAPH','ANSWERS','SKILLS','TASKS','ARTIFACTS'];
-let tab = 'OVERVIEW';
+'use strict';
 const $ = (s) => document.querySelector(s);
+const statusEl = $('#status'), logEl = $('#log'), talkBtn = $('#talk'), textIn = $('#text');
 
+// ---- token (one-time): accepts #t=TOKEN links, else asks once ----
+(function initToken() {
+  const m = location.hash.match(/t=([A-Za-z0-9]+)/);
+  if (m) { localStorage.setItem('kate_token', m[1]); history.replaceState(null, '', location.pathname); }
+})();
 function token() {
   let t = localStorage.getItem('kate_token');
-  if (!t) { t = prompt('Kate portal token:') || ''; localStorage.setItem('kate_token', t); }
+  if (!t) { t = prompt('Paste your Moneypenny key (one time):') || ''; localStorage.setItem('kate_token', t); }
   return t;
 }
-$('#tokenBtn').onclick = () => { localStorage.removeItem('kate_token'); token(); render(); };
-
-async function api(path, opts = {}) {
-  const r = await fetch(path, { ...opts, headers: { authorization: 'Bearer ' + token(), ...(opts.headers||{}) } });
-  if (r.status === 401) { localStorage.removeItem('kate_token'); throw new Error('bad token'); }
-  return r;
+async function api(path, body) {
+  const r = await fetch(path, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: 'Bearer ' + token() },
+    body: JSON.stringify(body),
+  });
+  if (r.status === 401) { localStorage.removeItem('kate_token'); throw new Error('wrong key — reload and paste it again'); }
+  if (!r.ok) throw new Error('server ' + r.status);
+  return r.json();
 }
-const getJson = async (p) => (await api(p)).json();
 
-function nav() {
-  $('#nav').innerHTML = TABS.map(t =>
-    `<button class="${t===tab?'active':''}" onclick="setTab('${t}')">${t}</button>`).join('');
-}
-window.setTab = (t) => { tab = t; render(); };
-
-async function render() {
-  nav();
-  const m = $('#main');
-  m.innerHTML = '<div class="muted">loading…</div>';
-  try {
-    if (tab === 'OVERVIEW') {
-      const o = await getJson('/api/overview');
-      m.innerHTML = '<div class="cards">' + Object.entries(o).map(([k,v]) =>
-        `<div class="card"><div class="num">${v}</div><div class="lbl">${k.toUpperCase()}</div></div>`).join('') + '</div>';
-    } else if (tab === 'GRAPH') {
-      m.innerHTML = '<canvas id="graph"></canvas><div class="muted" id="gInfo">drag to pan · wheel/pinch to zoom</div>';
-      drawGraph(await getJson('/api/graph'));
-    } else if (tab === 'ANSWERS') {
-      const rows = await getJson('/api/answers');
-      m.innerHTML = rows.length ? rows.map(t => `<div class="row">${esc(t.text)}
-        <div class="meta">${t.model_used||'?'} · ${t.latency_ms||0}ms · ${t.rating>0?'👍':t.rating<0?'👎':''} · ${when(t.created_at)}</div></div>`).join('')
-        : '<div class="muted">no answers synced yet</div>';
-    } else if (tab === 'SKILLS') {
-      const rows = await getJson('/api/skills');
-      m.innerHTML = rows.length ? rows.map(s => `<div class="row"><b style="color:var(--cyan)">${esc(s.name)}</b> · v${s.version}
-        <div class="meta">${esc(s.created_via)}</div><pre>${esc(pretty(s.definition_json))}</pre></div>`).join('')
-        : '<div class="muted">no skills synced yet</div>';
-    } else if (tab === 'TASKS') {
-      const rows = await getJson('/api/runs');
-      m.innerHTML = rows.length ? rows.map(r => `<div class="row">#${esc(String(r.id))} ${esc(r.skill_id)}
-        <span class="status-${r.status==='done'?'done':r.status==='failed'?'failed':'other'}" style="float:right">${esc(r.status.toUpperCase())}</span>
-        <div class="meta">${esc(r.inputs_json||'')} · ${esc(r.ran_on||'')}</div></div>`).join('')
-        : '<div class="muted">no task runs synced yet</div>';
-    } else if (tab === 'ARTIFACTS') {
-      const rows = await getJson('/api/artifacts');
-      m.innerHTML = rows.length ? rows.map(a => `<div class="row"><a href="#" onclick="openArtifact('${encodeURIComponent(a.key)}');return false">${esc(a.key)}</a>
-        <div class="meta">${(a.size/1024).toFixed(1)} KB · ${when(Date.parse(a.uploaded))}</div></div>`).join('')
-        : '<div class="muted">no artifacts yet</div>';
+// ---- orb ----
+const ctx = $('#orb').getContext('2d');
+let mode = 'idle', amp = 0, phase = 0;
+function drawOrb() {
+  phase += 0.016;
+  const c = 190, r = 62;
+  ctx.clearRect(0, 0, 380, 380);
+  const glow = ctx.createRadialGradient(c, c, 0, c, c, r * 2.1);
+  const g = mode === 'listening' ? 0.5 : mode === 'speaking' ? 0.32 + amp * 0.3 : 0.25;
+  glow.addColorStop(0, `rgba(255,107,122,${g})`);
+  glow.addColorStop(1, 'rgba(255,107,122,0)');
+  ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(c, c, r * 2.1, 0, 7); ctx.fill();
+  ctx.strokeStyle = '#FF6B7A'; ctx.lineWidth = 2.4;
+  const breath = mode === 'idle' ? 1 + 0.03 * Math.sin(phase * 1.6) : 1;
+  ctx.beginPath(); ctx.arc(c, c, r * breath, 0, 7); ctx.stroke();
+  ctx.fillStyle = '#FF6B7A'; ctx.beginPath(); ctx.arc(c, c, 10, 0, 7); ctx.fill();
+  if (mode === 'listening') {
+    for (let i = 0; i < 3; i++) {
+      const p = ((phase * 0.5) + i / 3) % 1;
+      ctx.strokeStyle = `rgba(255,107,122,${0.4 * p})`; ctx.lineWidth = 1.4;
+      ctx.beginPath(); ctx.arc(c, c, r * (2.1 - 1.05 * p), 0, 7); ctx.stroke();
     }
-  } catch (e) {
-    m.innerHTML = `<div class="muted">error: ${esc(String(e.message||e))}</div>`;
+  } else if (mode === 'thinking') {
+    ctx.strokeStyle = 'rgba(255,107,122,.8)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(c, c, r * 1.3, phase * 2.4, phase * 2.4 + 1.7); ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,107,122,.35)';
+    ctx.beginPath(); ctx.arc(c, c, r * 1.55, -phase * 3.6, -phase * 3.6 + 1.1); ctx.stroke();
+  } else if (mode === 'speaking') {
+    amp = 0.45 + 0.55 * Math.abs(Math.sin(phase * 7.3)) * (0.6 + 0.4 * Math.random());
+    for (let i = 0; i < 44; i++) {
+      const a = i / 44 * Math.PI * 2;
+      const w = 0.5 + 0.5 * Math.sin(phase * 9 + i * 0.9);
+      const len = 5 + 30 * amp * w;
+      ctx.strokeStyle = `rgba(255,107,122,${0.3 + 0.6 * amp * w})`; ctx.lineWidth = 2.4;
+      ctx.beginPath();
+      ctx.moveTo(c + Math.cos(a) * (r + 12), c + Math.sin(a) * (r + 12));
+      ctx.lineTo(c + Math.cos(a) * (r + 12 + len), c + Math.sin(a) * (r + 12 + len));
+      ctx.stroke();
+    }
   }
+  requestAnimationFrame(drawOrb);
+}
+drawOrb();
+function setMode(m, msg) { mode = m; if (msg !== undefined) statusEl.textContent = msg; }
+
+// ---- transcript ----
+function addMsg(who, text) {
+  const w = document.createElement('div'); w.className = 'who ' + (who === 'PENNY' ? 'penny' : '');
+  w.textContent = who;
+  const d = document.createElement('div'); d.className = 'msg ' + (who === 'PENNY' ? 'penny' : 'you');
+  d.textContent = text;
+  logEl.append(w, d); logEl.scrollTop = logEl.scrollHeight;
+  return d;
 }
 
-window.openArtifact = async (key) => {
-  const r = await api('/api/artifact/' + key);
-  $('#main').innerHTML = `<button class="btn" onclick="setTab('ARTIFACTS')">← BACK</button><div class="row" style="margin-top:12px"><pre>${esc(await r.text())}</pre></div>`;
+// ---- voice out: browser TTS, British female preferred ----
+let voice = null;
+function pickVoice() {
+  const vs = speechSynthesis.getVoices();
+  voice = vs.find((v) => /en[-_]GB/i.test(v.lang) && /female|Kate|Serena|Sonia|Libby/i.test(v.name))
+    || vs.find((v) => /en[-_]GB/i.test(v.lang))
+    || vs.find((v) => /^en/i.test(v.lang)) || null;
+}
+speechSynthesis.onvoiceschanged = pickVoice; pickVoice();
+function speak(text, onDone) {
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  if (voice) u.voice = voice;
+  u.rate = 1.04; u.pitch = 1.0;
+  u.onend = () => { setMode('idle', conversationMode ? 'listening again…' : ' '); onDone && onDone(); };
+  u.onerror = () => { setMode('idle', ' '); onDone && onDone(); };
+  setMode('speaking', ' ');
+  speechSynthesis.speak(u);
+}
+
+// ---- voice in: browser speech recognition ----
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let rec = null, listening = false;
+if (!SR) { talkBtn.disabled = true; statusEl.textContent = 'voice input needs Chrome — typing still works'; }
+function startListening() {
+  if (!SR || listening) return;
+  speechSynthesis.cancel();
+  rec = new SR();
+  rec.lang = 'en-GB'; rec.interimResults = true; rec.continuous = false;
+  listening = true; talkBtn.classList.add('listening'); talkBtn.textContent = '● LIVE';
+  setMode('listening', 'listening…');
+  let finalText = '';
+  rec.onresult = (e) => {
+    let interim = '';
+    for (const res of e.results) (res.isFinal ? (finalText += res[0].transcript) : (interim += res[0].transcript));
+    statusEl.textContent = '“' + (finalText + interim).trim() + '”';
+  };
+  rec.onerror = (e) => { stopUi(); setMode('idle', e.error === 'not-allowed' ? 'allow microphone access, then retry' : ' '); };
+  rec.onend = () => {
+    stopUi();
+    const said = finalText.trim();
+    if (said) handleUtterance(said); else setMode('idle', ' ');
+  };
+  rec.start();
+}
+function stopUi() { listening = false; talkBtn.classList.remove('listening'); talkBtn.textContent = 'TALK'; }
+
+// ---- conversation mode: she listens again after speaking ----
+let conversationMode = false;
+$('#convBtn').onclick = () => {
+  conversationMode = !conversationMode;
+  $('#convBtn').classList.toggle('on', conversationMode);
 };
 
-function esc(s){ return String(s??'').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
-function pretty(j){ try { return JSON.stringify(JSON.parse(j),null,2); } catch { return j; } }
-function when(ts){ return ts ? new Date(ts).toLocaleString() : ''; }
-
-// --- force graph (same physics as the phone) ---
-function drawGraph({nodes, edges}) {
-  const canvas = $('#graph');
-  const dpr = devicePixelRatio || 1;
-  canvas.width = canvas.clientWidth * dpr;
-  canvas.height = canvas.clientHeight * dpr;
-  const ctx = canvas.getContext('2d');
-  const pos = new Map();
-  nodes.forEach(n => pos.set(n.id, {x:(Math.random()-.5)*900, y:(Math.random()-.5)*900, vx:0, vy:0}));
-  let alpha = 1, scale = .7, panX = 0, panY = 0;
-
-  function step() {
-    const k = 90;
-    const ids = nodes.map(n => n.id);
-    for (let i = 0; i < ids.length; i++) for (let j = i+1; j < ids.length; j++) {
-      const a = pos.get(ids[i]), b = pos.get(ids[j]);
-      let dx = a.x-b.x, dy = a.y-b.y, d2 = dx*dx+dy*dy || 1, d = Math.sqrt(d2);
-      const f = (k*k/d)*.02*alpha, fx = dx/d*f, fy = dy/d*f;
-      a.vx += fx; a.vy += fy; b.vx -= fx; b.vy -= fy;
+// ---- brain + memory ----
+let history = [], conversationId = null;
+const RECALL = /what did i (?:say|tell you) about (.+?)\??$|what do you (?:know|remember) about (.+?)\??$/i;
+async function handleUtterance(text) {
+  addMsg('YOU', text);
+  setMode('thinking', 'thinking…');
+  try {
+    let reply;
+    const rm = text.match(RECALL);
+    if (rm) {
+      const q = (rm[1] || rm[2]).trim();
+      const hits = await api('/api/recall', { query: q });
+      reply = hits.length
+        ? `About ${q} — on ${new Date(hits[0].created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'long' })} you said: “${hits[0].content}”.`
+        : `I don't have anything about ${q} in my memory yet.`;
+    } else if (/^(?:moneypenny[,;]?\s*)?forget (?:that|it|this)\.?$/i.test(text)) {
+      const r = await api('/api/forget-last', {});
+      reply = r.forgotten ? "Forgotten. It's gone from my memory." : 'There was nothing recent to forget.';
+    } else if (/^(?:moneypenny[,;]?\s*)?pin (?:that|this|it)\.?$/i.test(text)) {
+      const r = await api('/api/pin-last', {});
+      reply = r.pinned ? "Pinned. I'll keep that permanently." : 'There was nothing recent to pin.';
+    } else {
+      history.push({ role: 'user', content: text });
+      const r = await api('/api/chat', { messages: history, conversation_id: conversationId });
+      conversationId = r.conversation_id;
+      reply = r.reply || '…';
+      history.push({ role: 'assistant', content: reply });
     }
-    for (const e of edges) {
-      const a = pos.get(e.from_node), b = pos.get(e.to_node);
-      if (!a || !b) continue;
-      const dx = b.x-a.x, dy = b.y-a.y, d = Math.max(.1, Math.hypot(dx,dy));
-      const f = (d-k)*.05*alpha, fx = dx/d*f, fy = dy/d*f;
-      a.vx += fx; a.vy += fy; b.vx -= fx; b.vy -= fy;
-    }
-    for (const p of pos.values()) {
-      p.vx -= p.x*.005*alpha; p.vy -= p.y*.005*alpha;
-      p.vx *= .85; p.vy *= .85; p.x += p.vx; p.y += p.vy;
-    }
-    alpha *= .985;
+    addMsg('PENNY', reply);
+    speak(reply, () => { if (conversationMode) setTimeout(startListening, 350); });
+  } catch (e) {
+    setMode('idle', ' ');
+    addMsg('PENNY', 'Something went wrong: ' + e.message);
   }
-
-  function draw() {
-    ctx.setTransform(dpr,0,0,dpr,0,0);
-    ctx.clearRect(0,0,canvas.clientWidth,canvas.clientHeight);
-    ctx.translate(canvas.clientWidth/2+panX, canvas.clientHeight/2+panY);
-    ctx.scale(scale, scale);
-    ctx.strokeStyle = '#17262E';
-    for (const e of edges) {
-      const a = pos.get(e.from_node), b = pos.get(e.to_node);
-      if (!a || !b) continue;
-      ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke();
-    }
-    ctx.font = '11px ui-monospace'; ctx.textAlign = 'center';
-    for (const n of nodes) {
-      const p = pos.get(n.id);
-      const r = n.kind==='conversation'?11 : n.kind==='topic'?8 : n.kind==='entity'?6.5 : n.kind==='skill'?9 : 3;
-      ctx.beginPath(); ctx.arc(p.x,p.y,r,0,7);
-      if (n.kind==='memory') { ctx.fillStyle = 'rgba(110,140,150,.4)'; ctx.fill(); }
-      else if (n.kind==='conversation') { ctx.strokeStyle = '#00E5FF'; ctx.stroke(); ctx.strokeStyle='#17262E'; }
-      else { ctx.fillStyle = '#00E5FF'; ctx.fill(); }
-      if (n.kind!=='memory' && scale > .45) { ctx.fillStyle = '#6E8C96'; ctx.fillText(n.label.slice(0,18), p.x, p.y-r-6); }
-    }
-    if (alpha > .01) { step(); requestAnimationFrame(draw); }
-  }
-  draw();
-
-  let dragging = false, lx = 0, ly = 0;
-  canvas.onpointerdown = (e) => { dragging = true; lx = e.clientX; ly = e.clientY; };
-  canvas.onpointermove = (e) => { if (dragging) { panX += e.clientX-lx; panY += e.clientY-ly; lx = e.clientX; ly = e.clientY; alpha = Math.max(alpha,.011); requestAnimationFrame(draw); } };
-  canvas.onpointerup = () => dragging = false;
-  canvas.onwheel = (e) => { e.preventDefault(); scale = Math.min(4, Math.max(.15, scale * (e.deltaY<0?1.1:.9))); alpha = Math.max(alpha,.011); requestAnimationFrame(draw); };
 }
 
-render();
+talkBtn.onclick = () => (listening ? rec && rec.stop() : startListening());
+$('#send').onclick = sendTyped;
+textIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') sendTyped(); });
+function sendTyped() {
+  const t = textIn.value.trim();
+  if (!t) return;
+  textIn.value = '';
+  handleUtterance(t);
+}
 </script>
 </body>
 </html>
